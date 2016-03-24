@@ -47,7 +47,7 @@ def getMaskedFile(filename, dirmask):
 def printFileList(fullname, mylist):
     with open(fullname, mode='w') as fin:
         for i in range(len(mylist)):
-            fin.write(mylist[i])
+            fin.write(mylist[i] + '\n')
 
 
 def main():
@@ -66,6 +66,9 @@ def main():
     print('nb authentic images: {}'.format(n_au))
     print('nb tampered images: {}'.format(n_tp))
 
+    n_tp = 30
+    n_au = 40
+    sys.stdout.flush()
     # authentic list
     print('Collecting authentic images.')
     au_str_list = []
@@ -93,7 +96,7 @@ def main():
                                                 os.path.join(settings.borders_tampered_folder, borderName),
                                                 os.path.join(settings.mask_tampered_folder, maskName)))
 
-    n_per_class = round(n_tp * settings.pct_test)
+    n_per_class = int(round(n_tp * settings.pct_test))
     # for each test file
     for tset in range(settings.kfold):
         print('Creating testset {}'.format(tset))
@@ -109,6 +112,8 @@ def main():
         shuffle(training)
         trainingfileout = os.path.join(settings.working_folder, 'training_t{}.txt'.format(tset))
         testfileout = os.path.join(settings.working_folder, 'test_t{}.txt'.format(tset))
+        printFileList(trainingfileout, training)
+        printFileList(testfileout, test)
 
 
 
