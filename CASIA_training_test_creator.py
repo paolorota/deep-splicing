@@ -66,8 +66,8 @@ def main():
     print('nb authentic images: {}'.format(n_au))
     print('nb tampered images: {}'.format(n_tp))
 
-    n_tp = 30
-    n_au = 40
+    # n_tp = 30
+    # n_au = 40
     sys.stdout.flush()
     # authentic list
     print('Collecting authentic images.')
