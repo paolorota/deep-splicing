@@ -58,6 +58,10 @@ def main():
         settingsFileName = 'config.ini'
     settings = Settings(settingsFileName)
 
+    # create workplace if not available
+    if not(os.path.isdir(settings.working_folder)):
+        os.makedirs(settings.working_folder)
+
     # Get db stats
     tp_filelist = glob.glob1(settings.tampered_folder, '*.*')
     au_filelist = glob.glob1(settings.authentic_folder, '*.*')
@@ -76,9 +80,9 @@ def main():
     for i in tqdm(range(n_au)):
         borderName, thr = getBorderFile(au_filelist[i], settings.borders_authentic_folder)
         au_borderList.append(borderName)
-        au_str_list.append('{},{},{},{}'.format(os.path.join(settings.authentic_folder, au_filelist[i]),
+        au_str_list.append('{},{},{},{}'.format(au_filelist[i],
                                                 0,
-                                                os.path.join(settings.borders_authentic_folder, borderName),
+                                                borderName,
                                                 'none'))
 
     # tampered list
@@ -91,10 +95,14 @@ def main():
         tp_borderlist.append(borderName)
         maskName, isBlurred = getMaskedFile(tp_filelist[i], settings.mask_tampered_folder)
         tp_masklist.append(maskName)
-        tp_str_list.append('{},{},{},{}'.format(os.path.join(settings.tampered_folder, tp_filelist[i]),
+        # tp_str_list.append('{},{},{},{}'.format(os.path.join(settings.tampered_folder, tp_filelist[i]),
+        #                                         1,
+        #                                         os.path.join(settings.borders_tampered_folder, borderName),
+        #                                         os.path.join(settings.mask_tampered_folder, maskName)))
+        tp_str_list.append('{},{},{},{}'.format(tp_filelist[i],
                                                 1,
-                                                os.path.join(settings.borders_tampered_folder, borderName),
-                                                os.path.join(settings.mask_tampered_folder, maskName)))
+                                                borderName,
+                                                maskName))
 
     n_per_class = int(round(n_tp * settings.pct_test))
     # for each test file
@@ -110,8 +118,8 @@ def main():
         training = au_training + tp_training
         shuffle(test)
         shuffle(training)
-        trainingfileout = os.path.join(settings.working_folder, 'training_t{}.txt'.format(tset))
-        testfileout = os.path.join(settings.working_folder, 'test_t{}.txt'.format(tset))
+        trainingfileout = os.path.join(settings.working_folder, 'training_t{}.txt'.format(tset+1))
+        testfileout = os.path.join(settings.working_folder, 'test_t{}.txt'.format(tset+1))
         printFileList(trainingfileout, training)
         printFileList(testfileout, test)
 
