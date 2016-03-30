@@ -3,7 +3,8 @@ from keras.models import Sequential, Graph
 from keras.layers.core import Dense, Dropout, Activation, Flatten, Merge
 from keras.layers.convolutional import Convolution2D, MaxPooling2D
 from keras.layers.normalization import BatchNormalization
-import cv2
+# import cv2
+from scipy.ndimage import imread
 import numpy as np
 from tqdm import tqdm
 import time
@@ -93,7 +94,8 @@ def exhaustive_patch_sampling(image, patch_size = 40, stride = 20):
 def get_patch_array(myimages, description):
     for i in tqdm(range(len(myimages)), desc=description):
         # Load an color image in BGR
-        img = cv2.imread(myimages[i].image_path, flags=cv2.IMREAD_COLOR)
+        img = imread(myimages[i].image_path, mode='RGB')
+        # img = cv2.imread(myimages[i].image_path, flags=cv2.IMREAD_COLOR)
         tmp_plist = exhaustive_patch_sampling(img, patch_size=40, stride=20)
         nb_samples = int(tmp_plist.shape[0])
         if myimages[i].label == 0:
@@ -145,7 +147,8 @@ def run_cnn(training_images, test_images, settings):
     t5 = time.time()
     results = np.zeros((nb_test, 1))
     for i in range(nb_test):
-        img = cv2.imread(test_images[i].image_path, flags=cv2.IMREAD_COLOR)
+        img = imread(test_images[i].image_path, mode='RGB')
+        # img = cv2.imread(test_images[i].image_path, flags=cv2.IMREAD_COLOR)
         test_x = exhaustive_patch_sampling(img, patch_size=40, stride=20)
         nb_extracted_patches = len(test_x)
         prediction = model.predict_classes(test_x, batch_size=settings.batch_size, verbose=True)
