@@ -78,7 +78,7 @@ def main():
         # try CNN
         if settings.method == 'CNN':
             print('CNN method')
-            results = run_cnn(training_images, test_images)
+            results = run_cnn(training_images, test_images, settings)
         else:
             # try dummy
             print('Dummy method')
