@@ -2,6 +2,8 @@ import ConfigParser
 import os, sys, glob
 import random
 import numpy as np
+import time
+from method_cnn import run_cnn
 
 class Settings:
     def __init__(self, filename):
@@ -16,6 +18,7 @@ class Settings:
         self.working_folder = Config.get('Dataset', 'Working_folder')
         # self.pct_test = float(Config.get('Dataset', 'Percent_test')) / 100
         # self.kfold = int(Config.get('Dataset', 'K_fold'))
+        self.method = Config.get('Test', 'Method')
 
 class TestImage:
     def __init__(self, text, settings):
@@ -71,8 +74,16 @@ def main():
         training_images = readtestfile(os.path.join(settings.working_folder, training_filelist[t]), settings)
         test_images = readtestfile(os.path.join(settings.working_folder, test_filelist[t]), settings)
 
-        # try dummy
-        results = dummymethod(training_images, test_images)
+        tinit = time.time()
+        # try CNN
+        if settings.method == 'CNN':
+            print('CNN method')
+            results = run_cnn(training_images, test_images)
+        else:
+            # try dummy
+            print('Dummy method')
+            results = dummymethod(training_images, test_images)
+        tend = time.time()
 
         # calc confusion matrix
         confmat = np.zeros((2,2))
@@ -93,6 +104,7 @@ def main():
     fscore = 2 * precision * recall / (precision + recall)
 
     # print
+    print("Training-test time: {} secs".format(tend - tinit))
     print('## Results ##')
     print('True Positive: {}'.format(int(true_positive)))
     print('True Negative: {}'.format(int(true_negative)))
