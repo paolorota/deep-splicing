@@ -115,7 +115,7 @@ def get_patch_array(myimages, description, p_size, p_stride):
     p_shape = x_tmp[0].shape
     x_arr = np.zeros((nb_over_patches, p_shape[1], p_shape[2], p_shape[3]), dtype=np.float32)
     y_arr = np.zeros((nb_over_patches, 1), dtype=np.float32)
-    print('DEBUG: pshape: {} && x_arr: {}'.format(p_shape, x_arr.shape))
+    #print('DEBUG: pshape: {} && x_arr: {}'.format(p_shape, x_arr.shape))
     c = 0
     for i in tqdm(range(len(myimages)), desc='Conversion to array'):
         single_image_patches = x_tmp[i]
@@ -124,7 +124,7 @@ def get_patch_array(myimages, description, p_size, p_stride):
         x_arr[c:c+pack_size, :, :, :] = single_image_patches
         y_arr[c:c+pack_size, :] = single_image_targets
         c += pack_size
-    print('DEBUG: pack_size: {} (must be: {})'.format(c, nb_over_patches))
+    #print('DEBUG: pack_size: {} (must be: {})'.format(c, nb_over_patches))
     return x_arr, y_arr
 
 
@@ -176,7 +176,7 @@ def run_cnn(training_images, test_images, settings, test_number):
     # Create Model
     t2 = time.time()
     model = VGG_regression_net_graph((train_x.shape[1], train_x.shape[2], train_x.shape[3]))
-    model.compile(loss='categorical_crossentropy', optimizer='Adam')
+    model.compile(loss='categorical_crossentropy', optimizer=adam())
     nb_params = model.count_params()
 
     # Train model
