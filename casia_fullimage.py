@@ -19,6 +19,8 @@ class Settings:
         # self.pct_test = float(Config.get('Dataset', 'Percent_test')) / 100
         # self.kfold = int(Config.get('Dataset', 'K_fold'))
         self.method = Config.get('Test', 'Method')
+        self.nb_epochs = int(Config.get('NN', 'nb_epochs'))
+        self.batch_size = int(Config.get('NN', 'batch_size'))
 
 class TestImage:
     def __init__(self, text, settings):

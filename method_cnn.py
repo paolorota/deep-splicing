@@ -6,6 +6,9 @@ from keras.layers.normalization import BatchNormalization
 import cv2
 import numpy as np
 from tqdm import tqdm
+import time
+import os
+import myfilelib as MY
 
 
 def VGG_regression_net(data_shape):
@@ -87,47 +90,78 @@ def exhaustive_patch_sampling(image, patch_size = 40, stride = 20):
         parray[i, :, :, :] = new_img
     return parray
 
+def get_patch_array(myimages, description):
+    for i in tqdm(range(len(myimages)), desc=description):
+        # Load an color image in BGR
+        img = cv2.imread(myimages[i].image_path, flags=cv2.IMREAD_COLOR)
+        tmp_plist = exhaustive_patch_sampling(img, patch_size=40, stride=20)
+        nb_samples = int(tmp_plist.shape[0])
+        if myimages[i].label == 0:
+            tmp_labels = np.zeros((nb_samples, 1))
+        elif myimages[i].label == 1:
+            tmp_labels = np.ones((nb_samples, 1))
+        else:
+            raise ("A label different fro 0 and 1 is not possible.")
+        # Creation of the training set
+        if i == 0:
+            x = tmp_plist
+            y = tmp_labels
+        else:
+            x = np.concatenate((x, tmp_plist))
+            y = np.concatenate((y, tmp_labels))
+    return x, y
 
 def run_cnn(training_images, test_images, settings):
     nb_training = len(training_images)
     nb_test = len(test_images)
 
     # extract patches for training
-    for i in tqdm(range(nb_training), desc='Creation of training set'):
-        # Load an color image in BGR
-        img = cv2.imread(training_images[i].image_path,flags=cv2.IMREAD_COLOR)
-        tmp_plist = exhaustive_patch_sampling(img, patch_size=40, stride=20)
-        nb_samples = int(tmp_plist.shape[0])
-        if training_images[i].label == 0:
-            tmp_labels = np.zeros((nb_samples, 1))
-        elif training_images[i].label == 1:
-            tmp_labels = np.ones((nb_samples, 1))
-        else:
-            raise("A label different fro 0 and 1 is not possible.")
-        # Creation of the training set
-        if i == 0:
-            train_x = tmp_plist
-            train_y = tmp_labels
-        else:
-            train_x = np.concatenate((train_x, tmp_plist))
-            train_y = np.concatenate((train_y, tmp_labels))
+    t0 = time.time()
+    train_x, train_y = get_patch_array(training_images, 'Creation of training set')
 
     # extract patches for test
-    for i in tqdm(range(nb_test), desc='Creation of test set'):
-        # Load an color image in BGR
+    t1 = time.time()
+    test_x, test_y = get_patch_array(test_images, 'Creation of test set') # Non necessario se non per validation
+
+    # Create Model
+    t2 = time.time()
+    model = VGG_regression_net_graph((train_x.shape[1], train_x.shape[2], train_x.shape[3]))
+    model.compile(loss='categorical_crossentropy', optimizer='Adam')
+    nb_params = model.count_params()
+
+    # Train model
+    t3 = time.time()
+    modelfileweights = os.path.join(settings.working_folder, 'modelNN_weights_ep{0:02d}_bs{1:02d}.h5'.format(settings.nb_epochs, settings.batch_size))
+    modelfilename = os.path.join(settings.working_folder, 'modelNN_ep{0:02d}_bs{1:02d}.json'.format(settings.nb_epochs, settings.batch_size))
+    model.fit((train_x, train_y), batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data=(test_x, test_y))
+
+    # Save the model
+    t4 = time.time()
+    json_string = model.to_json()
+    open(modelfilename, 'w').write(json_string)
+    model.save_weights(modelfileweights, overwrite=True)
+
+    ###### Test model #####
+    t5 = time.time()
+    results = np.zeros((nb_test, 1))
+    for i in range(nb_test):
         img = cv2.imread(test_images[i].image_path, flags=cv2.IMREAD_COLOR)
-        tmp_plist = exhaustive_patch_sampling(img, patch_size=40, stride=20)
-        nb_samples = int(tmp_plist.shape[0])
-        if test_images[i].label == 0:
-            tmp_labels = np.zeros((nb_samples, 1))
-        elif test_images[i].label == 1:
-            tmp_labels = np.ones((nb_samples, 1))
+        test_x = exhaustive_patch_sampling(img, patch_size=40, stride=20)
+        nb_extracted_patches = len(test_x)
+        prediction = model.predict_classes(test_x, batch_size=settings.batch_size, verbose=True)
+        nb_0 = len(prediction.argwhere(0))
+        nb_1 = len(prediction.argwhere(1))
+        if nb_0 > nb_1:
+            pred = 0
         else:
-            raise ("A label different fro 0 and 1 is not possible.")
-        # Creation of the training set
-        if i == 0:
-            test_x = tmp_plist
-            test_y = tmp_labels
-        else:
-            test_x = np.concatenate((test_x, tmp_plist))
-            test_y = np.concatenate((test_y, tmp_labels))
+            pred = 1
+        results[i, 0] = pred
+
+    t6 = time.time()
+    print('Time get training samples: {}'.format(MY.hms_string(t1 - t0)))
+    print('Time get test samples: {}'.format(MY.hms_string(t2 - t1)))
+    print('Time to generate the model: {}'.format(MY.hms_string(t3 - t2)))
+    print('Time for training the model: {}'.format(MY.hms_string(t4 - t3)))
+    print('Time for saving the model: {}'.format(MY.hms_string(t5 - t4)))
+    print('Time for testing model: {}'.format(MY.hms_string(t6 - t5)))
+    return results
