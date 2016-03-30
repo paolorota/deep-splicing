@@ -18,7 +18,9 @@ class Settings:
         self.working_folder = Config.get('Dataset', 'Working_folder')
         # self.pct_test = float(Config.get('Dataset', 'Percent_test')) / 100
         # self.kfold = int(Config.get('Dataset', 'K_fold'))
-        self.method = Config.get('Test', 'Method')
+        self.method = Config.get('Test', 'method')
+        self.patch_size = int(Config.get('Test', 'patch_size'))
+        self.patch_stride = int(Config.get('Test', 'patch_stride'))
         self.nb_epochs = int(Config.get('NN', 'nb_epochs'))
         self.batch_size = int(Config.get('NN', 'batch_size'))
 
@@ -80,7 +82,7 @@ def main():
         # try CNN
         if settings.method == 'CNN':
             print('CNN method')
-            results = run_cnn(training_images, test_images, settings)
+            results = run_cnn(training_images, test_images, settings, t)
         else:
             # try dummy
             print('Dummy method')

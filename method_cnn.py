@@ -3,13 +3,13 @@ from keras.models import Sequential, Graph
 from keras.layers.core import Dense, Dropout, Activation, Flatten, Merge
 from keras.layers.convolutional import Convolution2D, MaxPooling2D
 from keras.layers.normalization import BatchNormalization
-# import cv2
 from scipy.ndimage import imread
 import numpy as np
 from tqdm import tqdm
 import time
 import os
 import myfilelib as MY
+import h5py
 
 
 def VGG_regression_net(data_shape):
@@ -84,46 +84,94 @@ def exhaustive_patch_sampling(image, patch_size = 40, stride = 20):
     # now list containing image as (rows, cols, channels)
     # need to be exported as a ndarray (n_samples, n_channels, n_rows, n_cols)
     nb_patches = len(patch_list)
-    parray = np.zeros((nb_patches, 3, patch_size, patch_size))
+    parray = np.zeros((nb_patches, 3, patch_size, patch_size), dtype=np.float32)
     for i in range(nb_patches):
         img = patch_list[i]
         new_img = np.rollaxis(img, 2, 0)
         parray[i, :, :, :] = new_img
     return parray
 
-def get_patch_array(myimages, description):
+def get_patch_array(myimages, description, p_size, p_stride):
+    x_tmp = []
+    y_tmp = []
+    nb_over_patches = 0
     for i in tqdm(range(len(myimages)), desc=description):
         # Load an color image in BGR
         img = imread(myimages[i].image_path, mode='RGB')
         # img = cv2.imread(myimages[i].image_path, flags=cv2.IMREAD_COLOR)
-        tmp_plist = exhaustive_patch_sampling(img, patch_size=40, stride=20)
+        tmp_plist = exhaustive_patch_sampling(img, patch_size=p_size, stride=p_stride)
         nb_samples = int(tmp_plist.shape[0])
         if myimages[i].label == 0:
-            tmp_labels = np.zeros((nb_samples, 1))
+            tmp_labels = np.zeros((nb_samples, 1), dtype=np.float32)
         elif myimages[i].label == 1:
-            tmp_labels = np.ones((nb_samples, 1))
+            tmp_labels = np.ones((nb_samples, 1), dtype=np.float32)
         else:
             raise ("A label different fro 0 and 1 is not possible.")
         # Creation of the training set
-        if i == 0:
-            x = tmp_plist
-            y = tmp_labels
-        else:
-            x = np.concatenate((x, tmp_plist))
-            y = np.concatenate((y, tmp_labels))
-    return x, y
+        x_tmp.append(tmp_plist)
+        y_tmp.append(tmp_labels)
+        nb_over_patches += len(tmp_labels)
+    # generate the final array
+    p_shape = x_tmp[0].shape
+    x_arr = np.zeros((nb_over_patches, p_shape[1], p_shape[2], p_shape[3]), dtype=np.float32)
+    y_arr = np.zeros((nb_over_patches, 1), dtype=np.float32)
+    print('DEBUG: pshape: {} && x_arr: {}'.format(p_shape, x_arr.shape))
+    c = 0
+    for i in tqdm(range(len(myimages)), desc='Conversion to array'):
+        single_image_patches = x_tmp[i]
+        single_image_targets = y_tmp[i]
+        pack_size = len(single_image_patches)
+        x_arr[c:c+pack_size, :, :, :] = single_image_patches
+        y_arr[c:c+pack_size, :] = single_image_targets
+        c += pack_size
+    print('DEBUG: pack_size: {} (must be: {})'.format(c, nb_over_patches))
+    return x_arr, y_arr
 
-def run_cnn(training_images, test_images, settings):
+
+
+
+def run_cnn(training_images, test_images, settings, test_number):
     nb_training = len(training_images)
     nb_test = len(test_images)
 
     # extract patches for training
     t0 = time.time()
-    train_x, train_y = get_patch_array(training_images, 'Creation of training set')
+    tmp_filename = 'tmp_training_ts{}.h5'.format(test_number)
+    tmp_filename = os.path.join(settings.working_folder, tmp_filename)
+    if os.path.exists(tmp_filename):
+        print('{} found! No need to fetch data again.'.format(tmp_filename))
+        with h5py.File(tmp_filename, 'r') as f:
+            train_x = f['data'].value
+            train_y = f['label'].value
+    else:
+        print('{} not found! Need to fetch data.'.format(tmp_filename))
+        train_x, train_y = get_patch_array(training_images, 'Creation of training set', settings.patch_size,
+                                           settings.patch_stride)
+        print('Saving Training set: {}'.format(tmp_filename))
+        with h5py.File(tmp_filename, 'w') as f:
+            f.create_dataset('data', data=train_x)
+            f.create_dataset('label', data=train_y)
+            f.flush()
 
     # extract patches for test
     t1 = time.time()
-    test_x, test_y = get_patch_array(test_images, 'Creation of test set') # Non necessario se non per validation
+    tmp_filename = 'tmp_test_ts{}.h5'.format(test_number)
+    tmp_filename = os.path.join(settings.working_folder, tmp_filename)
+    if os.path.exists(tmp_filename):
+        print('{} found! No need to fetch data again.'.format(tmp_filename))
+        with h5py.File(tmp_filename, 'r') as f:
+            test_x = f['data'].value
+            test_y = f['label'].value
+    else:
+        print('{} not found! Need to fetch data.'.format(tmp_filename))
+        test_x, test_y = get_patch_array(test_images, 'Creation of test set', settings.patch_size,
+                                         settings.patch_stride)  # Non necessario se non per validation
+        print('Saving Test set: {}'.format(tmp_filename))
+        with h5py.File(tmp_filename, 'w') as f:
+            f.create_dataset('data', data=test_x)
+            f.create_dataset('label', data=test_y)
+            f.flush()
+
 
     # Create Model
     t2 = time.time()
