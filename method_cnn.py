@@ -1,8 +1,9 @@
-from keras.optimizers import SGD, adam
+from keras.optimizers import SGD, Adam
 from keras.models import Sequential, Graph
-from keras.layers.core import Dense, Dropout, Activation, Flatten, Merge
+from keras.layers.core import Dense, Dropout, Activation, Flatten
 from keras.layers.convolutional import Convolution2D, MaxPooling2D
 from keras.layers.normalization import BatchNormalization
+from keras.utils import np_utils
 from scipy.ndimage import imread
 import numpy as np
 from tqdm import tqdm
@@ -12,8 +13,7 @@ import myfilelib as MY
 import h5py
 
 
-def VGG_regression_net(data_shape):
-    # create a network
+def VGG_like_convnet(data_shape):
     model = Sequential()
     # input: 100x100 images with 3 channels -> (3, 100, 100) tensors.
     # this applies 32 convolution filters of size 3x3 each.
@@ -22,7 +22,6 @@ def VGG_regression_net(data_shape):
     model.add(Convolution2D(32, 3, 3))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=(2, 2)))
-    model.add(BatchNormalization(epsilon=5e-5, momentum=0.75))
     model.add(Dropout(0.25))
 
     model.add(Convolution2D(64, 3, 3, border_mode='valid'))
@@ -30,20 +29,23 @@ def VGG_regression_net(data_shape):
     model.add(Convolution2D(64, 3, 3))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=(2, 2)))
-    model.add(BatchNormalization(epsilon=5e-5, momentum=0.75))
     model.add(Dropout(0.25))
 
     model.add(Flatten())
     # Note: Keras does automatic shape inference.
     model.add(Dense(256))
     model.add(Activation('relu'))
+    model.add(Dropout(0.5))
 
-    model.add(Dense(1))
-    model.add(Activation('relu'))
-    print ('VGG_regression_net... nb params: {}'.format(model.count_params()))
+    model.add(Dense(2))
+    model.add(Activation('softmax'))
+
+    # sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
+    # model.compile(loss='categorical_crossentropy', optimizer=sgd)
+    print ('VGG_like_convnet... nb params: {}'.format(model.count_params()))
     return model
 
-def VGG_regression_net_graph(data_shape):
+def VGG_like_convnet_graph(data_shape):
     # create a network
     model = Graph()
     model.add_input(name='data_in', input_shape=(data_shape[0], data_shape[1], data_shape[2]))
@@ -65,10 +67,9 @@ def VGG_regression_net_graph(data_shape):
     model.add_node(Dense(256), name='dense1', input='flatten')
     model.add_node(Activation('relu'), name='relu5', input='dense1')
 
-    model.add_node(Dense(1), name='dense2', input='relu5')
-    model.add_node(Activation('relu'), name='reluout', input='dense2')
-    model.add_output(name='output', input='reluout')
-    print ('VGG_regression_net_graph... nb params: {}'.format(model.count_params()))
+    model.add_node(Dense(2), name='dense2', input='relu5')
+    model.add_node(Activation('softmax'), name='softmax_out', input='dense2')
+    print ('VGG_like_convnet_graph... nb params: {}'.format(model.count_params()))
     return model
 
 
@@ -152,6 +153,7 @@ def run_cnn(training_images, test_images, settings, test_number):
             f.create_dataset('data', data=train_x)
             f.create_dataset('label', data=train_y)
             f.flush()
+    train_y = np_utils.to_categorical(train_y, 2)
 
     # extract patches for test
     t1 = time.time()
@@ -171,19 +173,20 @@ def run_cnn(training_images, test_images, settings, test_number):
             f.create_dataset('data', data=test_x)
             f.create_dataset('label', data=test_y)
             f.flush()
-
+    test_y = np_utils.to_categorical(test_y, 2)
 
     # Create Model
     t2 = time.time()
-    model = VGG_regression_net_graph((train_x.shape[1], train_x.shape[2], train_x.shape[3]))
-    model.compile(loss='categorical_crossentropy', optimizer=adam())
+    model = VGG_like_convnet((train_x.shape[1], train_x.shape[2], train_x.shape[3]))
+    sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
+    model.compile(loss='categorical_crossentropy', optimizer=sgd)
     nb_params = model.count_params()
 
     # Train model
     t3 = time.time()
     modelfileweights = os.path.join(settings.working_folder, 'modelNN_weights_ep{0:02d}_bs{1:02d}.h5'.format(settings.nb_epochs, settings.batch_size))
     modelfilename = os.path.join(settings.working_folder, 'modelNN_ep{0:02d}_bs{1:02d}.json'.format(settings.nb_epochs, settings.batch_size))
-    model.fit((train_x, train_y), batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data=(test_x, test_y))
+    model.fit(train_x, train_y, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data=(test_x, test_y))
 
     # Save the model
     t4 = time.time()
