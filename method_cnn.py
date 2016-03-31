@@ -13,7 +13,7 @@ import myfilelib as MY
 import h5py
 
 
-def VGG_like_convnet(data_shape):
+def VGG_like_convnet(data_shape, opt):
     model = Sequential()
     # input: 100x100 images with 3 channels -> (3, 100, 100) tensors.
     # this applies 32 convolution filters of size 3x3 each.
@@ -40,12 +40,11 @@ def VGG_like_convnet(data_shape):
     model.add(Dense(2))
     model.add(Activation('softmax'))
 
-    # sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
-    # model.compile(loss='categorical_crossentropy', optimizer=sgd)
     print ('VGG_like_convnet... nb params: {}'.format(model.count_params()))
+    model.compile(loss='categorical_crossentropy', optimizer=opt)
     return model
 
-def VGG_like_convnet_graph(data_shape):
+def VGG_like_convnet_graph(data_shape, opt):
     # create a network
     model = Graph()
     model.add_input(name='data_in', input_shape=(data_shape[0], data_shape[1], data_shape[2]))
@@ -69,7 +68,9 @@ def VGG_like_convnet_graph(data_shape):
 
     model.add_node(Dense(2), name='dense2', input='relu5')
     model.add_node(Activation('softmax'), name='softmax_out', input='dense2')
+    model.add_output(name='class_out', input='softmax_out')
     print ('VGG_like_convnet_graph... nb params: {}'.format(model.count_params()))
+    model.compile(loss={'class_out':'categorical_crossentropy'}, optimizer=opt)
     return model
 
 
@@ -177,16 +178,16 @@ def run_cnn(training_images, test_images, settings, test_number):
 
     # Create Model
     t2 = time.time()
-    model = VGG_like_convnet((train_x.shape[1], train_x.shape[2], train_x.shape[3]))
     sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
-    model.compile(loss='categorical_crossentropy', optimizer=sgd)
+    model = VGG_like_convnet_graph((train_x.shape[1], train_x.shape[2], train_x.shape[3]), sgd)
     nb_params = model.count_params()
 
     # Train model
     t3 = time.time()
     modelfileweights = os.path.join(settings.working_folder, 'modelNN_weights_ep{0:02d}_bs{1:02d}.h5'.format(settings.nb_epochs, settings.batch_size))
     modelfilename = os.path.join(settings.working_folder, 'modelNN_ep{0:02d}_bs{1:02d}.json'.format(settings.nb_epochs, settings.batch_size))
-    model.fit(train_x, train_y, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data=(test_x, test_y))
+    #model.fit(train_x, train_y, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data=(test_x, test_y))
+    model.fit({'data_in':train_x, 'class_out':train_y}, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs)
 
     # Save the model
     t4 = time.time()
