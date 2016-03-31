@@ -3,6 +3,7 @@ from keras.models import Sequential, Graph
 from keras.layers.core import Dense, Dropout, Activation, Flatten
 from keras.layers.convolutional import Convolution2D, MaxPooling2D
 from keras.layers.normalization import BatchNormalization
+from keras.models import model_from_json
 from keras.utils import np_utils
 from scipy.ndimage import imread
 import numpy as np
@@ -130,70 +131,91 @@ def get_patch_array(myimages, description, p_size, p_stride):
     return x_arr, y_arr
 
 
+def read_model_from_disk(weights_path, model_path):
+    assert os.path.exists(model_path), 'Model json not found (see "model_path" variable in script).'
+    model = model_from_json(open(model_path).read())
+    assert os.path.exists(weights_path), 'Model weights not found (see "weights_path" variable in script).'
+    with h5py.File(weights_path) as f:
+        for k in range(f.attrs['nb_layers']):
+            if k >= len(model.layers):
+                # we don't look at the last (fully-connected) layers in the savefile
+                break
+            g = f['layer_{}'.format(k)]
+            weights = [g['param_{}'.format(p)] for p in range(g.attrs['nb_params'])]
+            model.layers[k].set_weights(weights)
+    print('Model loaded.')
+    return model
 
 
 def run_cnn(training_images, test_images, settings, test_number):
     nb_training = len(training_images)
     nb_test = len(test_images)
 
-    # extract patches for training
-    t0 = time.time()
-    tmp_filename = 'tmp_training_ts{}.h5'.format(test_number)
-    tmp_filename = os.path.join(settings.working_folder, tmp_filename)
-    if os.path.exists(tmp_filename):
-        print('{} found! No need to fetch data again.'.format(tmp_filename))
-        with h5py.File(tmp_filename, 'r') as f:
-            train_x = f['data'].value
-            train_y = f['label'].value
-    else:
-        print('{} not found! Need to fetch data.'.format(tmp_filename))
-        train_x, train_y = get_patch_array(training_images, 'Creation of training set', settings.patch_size,
-                                           settings.patch_stride)
-        print('Saving Training set: {}'.format(tmp_filename))
-        with h5py.File(tmp_filename, 'w') as f:
-            f.create_dataset('data', data=train_x)
-            f.create_dataset('label', data=train_y)
-            f.flush()
-    train_y = np_utils.to_categorical(train_y, 2)
-
-    # extract patches for test
-    t1 = time.time()
-    tmp_filename = 'tmp_test_ts{}.h5'.format(test_number)
-    tmp_filename = os.path.join(settings.working_folder, tmp_filename)
-    if os.path.exists(tmp_filename):
-        print('{} found! No need to fetch data again.'.format(tmp_filename))
-        with h5py.File(tmp_filename, 'r') as f:
-            test_x = f['data'].value
-            test_y = f['label'].value
-    else:
-        print('{} not found! Need to fetch data.'.format(tmp_filename))
-        test_x, test_y = get_patch_array(test_images, 'Creation of test set', settings.patch_size,
-                                         settings.patch_stride)  # Non necessario se non per validation
-        print('Saving Test set: {}'.format(tmp_filename))
-        with h5py.File(tmp_filename, 'w') as f:
-            f.create_dataset('data', data=test_x)
-            f.create_dataset('label', data=test_y)
-            f.flush()
-    test_y = np_utils.to_categorical(test_y, 2)
-
-    # Create Model
-    t2 = time.time()
-    sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
-    model = VGG_like_convnet_graph((train_x.shape[1], train_x.shape[2], train_x.shape[3]), sgd)
-    nb_params = model.count_params()
-
-    # Train model
-    t3 = time.time()
+    # Training model
     modelfileweights = os.path.join(settings.working_folder, 'modelNN_weights_ep{0:02d}_bs{1:02d}.h5'.format(settings.nb_epochs, settings.batch_size))
     modelfilename = os.path.join(settings.working_folder, 'modelNN_ep{0:02d}_bs{1:02d}.json'.format(settings.nb_epochs, settings.batch_size))
-    #model.fit(train_x, train_y, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data=(test_x, test_y))
-    model.fit({'data_in':train_x, 'class_out':train_y}, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs)
+    if not(os.path.exists(modelfileweights) & os.path.exists(modelfilename)):
+        # extract patches for training
+        t0 = time.time()
+        tmp_filename = 'tmp_training_ts{}.h5'.format(test_number)
+        tmp_filename = os.path.join(settings.working_folder, tmp_filename)
+        if os.path.exists(tmp_filename):
+            print('{} found! No need to fetch data again.'.format(tmp_filename))
+            with h5py.File(tmp_filename, 'r') as f:
+                train_x = f['data'].value
+                train_y = f['label'].value
+        else:
+            print('{} not found! Need to fetch data.'.format(tmp_filename))
+            train_x, train_y = get_patch_array(training_images, 'Creation of training set', settings.patch_size,
+                                               settings.patch_stride)
+            print('Saving Training set: {}'.format(tmp_filename))
+            with h5py.File(tmp_filename, 'w') as f:
+                f.create_dataset('data', data=train_x)
+                f.create_dataset('label', data=train_y)
+                f.flush()
+        train_y = np_utils.to_categorical(train_y, 2)
 
-    # Save the model
-    t4 = time.time()
-    json_string = model.to_json()
-    open(modelfilename, 'w').write(json_string)
-    model.save_weights(modelfileweights, overwrite=True)
+        # extract patches for test
+        t1 = time.time()
+        tmp_filename = 'tmp_test_ts{}.h5'.format(test_number)
+        tmp_filename = os.path.join(settings.working_folder, tmp_filename)
+        if os.path.exists(tmp_filename):
+            print('{} found! No need to fetch data again.'.format(tmp_filename))
+            with h5py.File(tmp_filename, 'r') as f:
+                test_x = f['data'].value
+                test_y = f['label'].value
+        else:
+            print('{} not found! Need to fetch data.'.format(tmp_filename))
+            test_x, test_y = get_patch_array(test_images, 'Creation of test set', settings.patch_size,
+                                             settings.patch_stride)  # Non necessario se non per validation
+            print('Saving Test set: {}'.format(tmp_filename))
+            with h5py.File(tmp_filename, 'w') as f:
+                f.create_dataset('data', data=test_x)
+                f.create_dataset('label', data=test_y)
+                f.flush()
+        test_y = np_utils.to_categorical(test_y, 2)
+
+        # Create Model
+        t2 = time.time()
+        # sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
+        adam = Adam()
+        model = VGG_like_convnet((train_x.shape[1], train_x.shape[2], train_x.shape[3]), adam)
+        nb_params = model.count_params()
+
+        # Train model
+        t3 = time.time()
+
+        model.fit(train_x, train_y, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data=(test_x, test_y))
+        # model.fit({'data_in':train_x, 'class_out':train_y}, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data={'data_in':test_x, 'class_out':test_y})
+
+        # Save the model
+        t4 = time.time()
+        json_string = model.to_json()
+        open(modelfilename, 'w').write(json_string)
+        model.save_weights(modelfileweights, overwrite=True)
+    else:
+        print('Read model from file.')
+        model = read_model_from_disk(modelfileweights, modelfilename)
 
     ###### Test model #####
     t5 = time.time()
@@ -203,6 +225,9 @@ def run_cnn(training_images, test_images, settings, test_number):
         # img = cv2.imread(test_images[i].image_path, flags=cv2.IMREAD_COLOR)
         test_x = exhaustive_patch_sampling(img, patch_size=40, stride=20)
         nb_extracted_patches = len(test_x)
+        # prediction = model.predict_classes({'data_in':test_x}, batch_size=settings.batch_size, verbose=True)
+        # nb_0 = len(prediction['class_out'].argwhere(0))
+        # nb_1 = len(prediction['class_out'].argwhere(1))
         prediction = model.predict_classes(test_x, batch_size=settings.batch_size, verbose=True)
         nb_0 = len(prediction.argwhere(0))
         nb_1 = len(prediction.argwhere(1))
