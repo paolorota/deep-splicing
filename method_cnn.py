@@ -150,6 +150,7 @@ def read_model_from_disk(weights_path, model_path):
 def run_cnn(training_images, test_images, settings, test_number):
     nb_training = len(training_images)
     nb_test = len(test_images)
+    doLoading = False # used just for printing times in the end
 
     # Training model
     modelfileweights = os.path.join(settings.working_folder, 'modelNN_weights_ep{0:02d}_bs{1:02d}.h5'.format(settings.nb_epochs, settings.batch_size))
@@ -195,6 +196,10 @@ def run_cnn(training_images, test_images, settings, test_number):
                 f.flush()
         test_y = np_utils.to_categorical(test_y, 2)
 
+        # Normalization
+        train_x = train_x / 255
+        test_x = test_x / 255
+
         # Create Model
         t2 = time.time()
         # sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
@@ -224,13 +229,14 @@ def run_cnn(training_images, test_images, settings, test_number):
         img = imread(test_images[i].image_path, mode='RGB')
         # img = cv2.imread(test_images[i].image_path, flags=cv2.IMREAD_COLOR)
         test_x = exhaustive_patch_sampling(img, patch_size=40, stride=20)
-        nb_extracted_patches = len(test_x)
+        # Normalization
+        test_x = test_x / 255
         # prediction = model.predict_classes({'data_in':test_x}, batch_size=settings.batch_size, verbose=True)
         # nb_0 = len(prediction['class_out'].argwhere(0))
         # nb_1 = len(prediction['class_out'].argwhere(1))
         prediction = model.predict_classes(test_x, batch_size=settings.batch_size, verbose=True)
-        nb_0 = len(prediction.argwhere(0))
-        nb_1 = len(prediction.argwhere(1))
+        nb_0 = len(np.argwhere(prediction == 0))
+        nb_1 = len(np.argwhere(prediction == 1))
         if nb_0 > nb_1:
             pred = 0
         else:
@@ -238,10 +244,10 @@ def run_cnn(training_images, test_images, settings, test_number):
         results[i, 0] = pred
 
     t6 = time.time()
-    print('Time get training samples: {}'.format(MY.hms_string(t1 - t0)))
-    print('Time get test samples: {}'.format(MY.hms_string(t2 - t1)))
-    print('Time to generate the model: {}'.format(MY.hms_string(t3 - t2)))
-    print('Time for training the model: {}'.format(MY.hms_string(t4 - t3)))
-    print('Time for saving the model: {}'.format(MY.hms_string(t5 - t4)))
-    print('Time for testing model: {}'.format(MY.hms_string(t6 - t5)))
+    # print('Time get training samples: {}'.format(MY.hms_string(t1 - t0)))
+    # print('Time get test samples: {}'.format(MY.hms_string(t2 - t1)))
+    # print('Time to generate the model: {}'.format(MY.hms_string(t3 - t2)))
+    # print('Time for training the model: {}'.format(MY.hms_string(t4 - t3)))
+    # print('Time for saving the model: {}'.format(MY.hms_string(t5 - t4)))
+    # print('Time for testing model: {}'.format(MY.hms_string(t6 - t5)))
     return results
