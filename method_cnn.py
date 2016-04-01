@@ -75,6 +75,41 @@ def VGG_like_convnet_graph(data_shape, opt):
     return model
 
 
+def AlexNet_like_convnet(data_shape, opt):
+    model = Sequential()
+    model.add(Convolution2D(96, 10, 10, border_mode='valid', input_shape=(data_shape[0], data_shape[1], data_shape[2])))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(poolsize=(2, 2)))
+
+    model.add(Convolution2D(256, 5, 5, border_mode='valid'))
+    model.add(Activation('relu'))
+    model.add(BatchNormalization(epsilon=1e-06, mode=0))
+    model.add(MaxPooling2D(poolsize=(2, 2)))
+
+    model.add(Convolution2D(512, 3, 3, border_mode='valid'))
+    model.add(Activation('relu'))
+    model.add(BatchNormalization(epsilon=1e-06, mode=0))
+    model.add(MaxPooling2D(poolsize=(2, 2)))
+
+    model.add(Flatten())
+    model.add(Dense(4096, init='normal'))
+    model.add(Activation('relu'))
+    model.add(BatchNormalization(epsilon=1e-06, mode=0))
+    model.add(Dense(4096, init='normal'))
+    model.add(Activation('relu'))
+    model.add(BatchNormalization(epsilon=1e-06, mode=0))
+    model.add(Dense(2))
+    model.add(Activation('softmax'))
+
+    print ('AlexNet_like_convnet... nb params: {}'.format(model.count_params()))
+    model.compile(loss='categorical_crossentropy', optimizer=opt)
+    return model
+
+
+def border_patch_sampling(image, patch_size = 40):
+    pass
+
+
 def exhaustive_patch_sampling(image, patch_size = 40, stride = 20):
     (rows, cols, channels) = image.shape
     bias_rows = int(round((rows % patch_size)/2))

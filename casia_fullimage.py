@@ -23,6 +23,7 @@ class Settings:
         self.patch_stride = int(Config.get('Test', 'patch_stride'))
         self.nb_epochs = int(Config.get('NN', 'nb_epochs'))
         self.batch_size = int(Config.get('NN', 'batch_size'))
+        self.out_rootfile = Config.get('Output', 'root_file')
 
 class TestImage:
     def __init__(self, text, settings):
@@ -66,12 +67,15 @@ def main():
     else:
         settingsFileName = 'config.ini'
     settings = Settings(settingsFileName)
+    isDebug = 1
 
     # search for training and test files
     training_filelist = glob.glob1(settings.working_folder, 'training*')
     test_filelist = glob.glob1(settings.working_folder, 'test*')
 
     nb_tests = len(test_filelist)
+    if isDebug == 1:
+        nb_tests = 1
 
     cumulative_confmat = np.zeros((2,2))
     for t in range(nb_tests):
@@ -118,6 +122,38 @@ def main():
     print('Precision: {}'.format(precision))
     print('Recall: {}'.format(recall))
     print('F-score: {}'.format(fscore))
+
+    # Exproting results on file
+    results_dir = os.path.join(settings.working_folder, 'results')
+    print('Results folder: {}'.format(results_dir))
+    try:
+        os.stat(results_dir)
+    except:
+        os.mkdir(results_dir)
+
+    fileout = settings.out_rootfile + '.DFresults'
+    print('Results file: {}'.format(fileout))
+    with open(os.path.join(results_dir, fileout), 'w') as f:
+        s = []
+        s.append('RESULTS for Deep Forensics Splicing detection in images\n')
+        s.append('Method: {}\n'.format(settings.method))
+        s.append('Patch size: {}\n'.format(settings.patch_size))
+        s.append('Patch minimum stride: {}\n'.format(settings.patch_stride))
+        if 'CNN' in settings.method:
+            s.append('Number of epochs: {}\n'.format(settings.nb_epochs))
+            s.append('Batch size: {}\n'.format(settings.batch_size))
+
+        # Resutls
+        s.append('\n#### RESULTS on IMAGES####\n')
+        s.append('Accuracy on images: {}\n'.format(accuracy))
+        s.append('Precision on images: {}\n'.format(precision))
+        s.append('Recall on images: {}\n'.format(recall))
+        s.append('F-Score on images: {}\n'.format(fscore))
+        s.append('True Positive: {}\n'.format(int(true_positive)))
+        s.append('True Negative: {}\n'.format(int(true_negative)))
+        s.append('False Positive: {}\n'.format(int(false_positive)))
+        s.append('False Negative: {}\n'.format(int(false_negative)))
+        f.writelines(s)
 
 
 ########### END ################
