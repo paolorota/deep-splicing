@@ -23,7 +23,6 @@ class Settings:
         self.patch_stride = int(Config.get('Test', 'patch_stride'))
         self.nb_epochs = int(Config.get('NN', 'nb_epochs'))
         self.batch_size = int(Config.get('NN', 'batch_size'))
-        self.out_rootfile = Config.get('Output', 'root_file')
 
 class TestImage:
     def __init__(self, text, settings):
@@ -32,10 +31,12 @@ class TestImage:
         if self.label == 0:
             self.image_path = os.path.join(settings.authentic_folder, s[0])
             self.mask_image = s[3]
+            self.border_image = os.path.join(settings.borders_authentic_folder, s[2])
         else:
             self.image_path = os.path.join(settings.tampered_folder, s[0])
             self.mask_image = os.path.join(settings.mask_tampered_folder, s[3])
-        self.border_image = os.path.join(settings.borders_authentic_folder, s[2])
+            self.border_image = os.path.join(settings.borders_tampered_folder, s[2])
+
 
 
 
@@ -84,7 +85,7 @@ def main():
 
         tinit = time.time()
         # try CNN
-        if settings.method == 'CNN':
+        if 'CNN' in settings.method:
             print('CNN method')
             results = run_cnn(training_images, test_images, settings, t)
         else:
@@ -131,7 +132,7 @@ def main():
     except:
         os.mkdir(results_dir)
 
-    fileout = settings.out_rootfile + '.DFresults'
+    fileout = settings.method + '.DFresults'
     print('Results file: {}'.format(fileout))
     with open(os.path.join(results_dir, fileout), 'w') as f:
         s = []

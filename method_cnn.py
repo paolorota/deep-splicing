@@ -12,6 +12,7 @@ import time
 import os
 import myfilelib as MY
 import h5py
+import matplotlib.pyplot as pl
 
 
 def VGG_like_convnet(data_shape, opt):
@@ -106,19 +107,27 @@ def AlexNet_like_convnet(data_shape, opt):
     return model
 
 
-def border_patch_sampling(image, patch_size = 40):
-    pass
-
-
-def exhaustive_patch_sampling(image, patch_size = 40, stride = 20):
+def border_patch_sampling(image, patch_size=40, stride=20, b_image=None, b_thr=1):
     (rows, cols, channels) = image.shape
-    bias_rows = int(round((rows % patch_size)/2))
-    bias_cols = int(round((cols % patch_size)/2))
+    bias_rows = int(round((rows % patch_size) / 2))
+    bias_cols = int(round((cols % patch_size) / 2))
     patch_list = []
     for r in range(bias_rows, rows - bias_rows - patch_size, stride):
         for c in range(bias_cols, cols - bias_cols - patch_size, stride):
-            patch = image[r:r+patch_size, c:c+patch_size, :]
-            patch_list.append(patch)
+            # check if the border image has a border inside
+            if not(b_image == None):
+                b_patch = b_image[r:r + patch_size, c:c + patch_size]
+                b_patch[b_patch <= 128] = 0
+                # b_patch[b_patch > 128] == 255
+                # pl.imshow(b_patch)
+                # pl.show()
+                if len(b_patch[b_patch == 0]) > float(b_thr) * float(patch_size):
+                    patch = image[r:r + patch_size, c:c + patch_size, :]
+                    patch_list.append(patch)
+            # don't care about borders in this case, get all the patches
+            else:
+                patch = image[r:r + patch_size, c:c + patch_size, :]
+                patch_list.append(patch)
     # now list containing image as (rows, cols, channels)
     # need to be exported as a ndarray (n_samples, n_channels, n_rows, n_cols)
     nb_patches = len(patch_list)
@@ -129,7 +138,27 @@ def exhaustive_patch_sampling(image, patch_size = 40, stride = 20):
         parray[i, :, :, :] = new_img
     return parray
 
-def get_patch_array(myimages, description, p_size, p_stride):
+# def exhaustive_patch_sampling(image, patch_size = 40, stride = 20):
+#     (rows, cols, channels) = image.shape
+#     bias_rows = int(round((rows % patch_size)/2))
+#     bias_cols = int(round((cols % patch_size)/2))
+#     patch_list = []
+#     for r in range(bias_rows, rows - bias_rows - patch_size, stride):
+#         for c in range(bias_cols, cols - bias_cols - patch_size, stride):
+#             patch = image[r:r+patch_size, c:c+patch_size, :]
+#             patch_list.append(patch)
+#     # now list containing image as (rows, cols, channels)
+#     # need to be exported as a ndarray (n_samples, n_channels, n_rows, n_cols)
+#     nb_patches = len(patch_list)
+#     parray = np.zeros((nb_patches, 3, patch_size, patch_size), dtype=np.float32)
+#     for i in range(nb_patches):
+#         img = patch_list[i]
+#         new_img = np.rollaxis(img, 2, 0)
+#         parray[i, :, :, :] = new_img
+#     return parray
+
+
+def get_patch_array(myimages, description, p_size, p_stride, doBorderSearch=1):
     x_tmp = []
     y_tmp = []
     nb_over_patches = 0
@@ -137,7 +166,12 @@ def get_patch_array(myimages, description, p_size, p_stride):
         # Load an color image in BGR
         img = imread(myimages[i].image_path, mode='RGB')
         # img = cv2.imread(myimages[i].image_path, flags=cv2.IMREAD_COLOR)
-        tmp_plist = exhaustive_patch_sampling(img, patch_size=p_size, stride=p_stride)
+        # tmp_plist = exhaustive_patch_sampling(img, patch_size=p_size, stride=p_stride)
+        if doBorderSearch:
+            img_b = imread(myimages[i].border_image, flatten=True)
+            tmp_plist = border_patch_sampling(img, patch_size=p_size, stride=p_stride, b_image=img_b)
+        else:
+            tmp_plist = border_patch_sampling(img, patch_size=p_size, stride=p_stride)
         nb_samples = int(tmp_plist.shape[0])
         if myimages[i].label == 0:
             tmp_labels = np.zeros((nb_samples, 1), dtype=np.float32)
@@ -186,10 +220,11 @@ def run_cnn(training_images, test_images, settings, test_number):
     nb_training = len(training_images)
     nb_test = len(test_images)
     doLoading = False # used just for printing times in the end
+    useBorders = 1
 
     # Training model
-    modelfileweights = os.path.join(settings.working_folder, 'modelNN_weights_ep{0:02d}_bs{1:02d}.h5'.format(settings.nb_epochs, settings.batch_size))
-    modelfilename = os.path.join(settings.working_folder, 'modelNN_ep{0:02d}_bs{1:02d}.json'.format(settings.nb_epochs, settings.batch_size))
+    modelfileweights = os.path.join(settings.working_folder, 'model{2}_weights_ep{0:02d}_bs{1:02d}.h5'.format(settings.nb_epochs, settings.batch_size, settings.method))
+    modelfilename = os.path.join(settings.working_folder, 'model{2}_ep{0:02d}_bs{1:02d}.json'.format(settings.nb_epochs, settings.batch_size, settings.method))
     if not(os.path.exists(modelfileweights) & os.path.exists(modelfilename)):
         # extract patches for training
         t0 = time.time()
@@ -203,7 +238,7 @@ def run_cnn(training_images, test_images, settings, test_number):
         else:
             print('{} not found! Need to fetch data.'.format(tmp_filename))
             train_x, train_y = get_patch_array(training_images, 'Creation of training set', settings.patch_size,
-                                               settings.patch_stride)
+                                               settings.patch_stride, doBorderSearch=useBorders)
             print('Saving Training set: {}'.format(tmp_filename))
             with h5py.File(tmp_filename, 'w') as f:
                 f.create_dataset('data', data=train_x)
@@ -223,7 +258,7 @@ def run_cnn(training_images, test_images, settings, test_number):
         else:
             print('{} not found! Need to fetch data.'.format(tmp_filename))
             test_x, test_y = get_patch_array(test_images, 'Creation of test set', settings.patch_size,
-                                             settings.patch_stride)  # Non necessario se non per validation
+                                             settings.patch_stride, doBorderSearch=useBorders)  # Non necessario se non per validation
             print('Saving Test set: {}'.format(tmp_filename))
             with h5py.File(tmp_filename, 'w') as f:
                 f.create_dataset('data', data=test_x)
@@ -263,7 +298,12 @@ def run_cnn(training_images, test_images, settings, test_number):
     for i in range(nb_test):
         img = imread(test_images[i].image_path, mode='RGB')
         # img = cv2.imread(test_images[i].image_path, flags=cv2.IMREAD_COLOR)
-        test_x = exhaustive_patch_sampling(img, patch_size=40, stride=20)
+        if useBorders:
+            img_b = imread(test_images[i].border_image, flatten=True)
+            test_x = border_patch_sampling(img, patch_size=40, stride=20, b_image=img_b, b_thr=1)
+        else:
+            test_x = border_patch_sampling(img, patch_size=40, stride=20)
+
         # Normalization
         test_x = test_x / 255
         # prediction = model.predict_classes({'data_in':test_x}, batch_size=settings.batch_size, verbose=True)
