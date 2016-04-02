@@ -80,17 +80,17 @@ def AlexNet_like_convnet(data_shape, opt):
     model = Sequential()
     model.add(Convolution2D(96, 10, 10, border_mode='valid', input_shape=(data_shape[0], data_shape[1], data_shape[2])))
     model.add(Activation('relu'))
-    model.add(MaxPooling2D(poolsize=(2, 2)))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
 
     model.add(Convolution2D(256, 5, 5, border_mode='valid'))
     model.add(Activation('relu'))
     model.add(BatchNormalization(epsilon=1e-06, mode=0))
-    model.add(MaxPooling2D(poolsize=(2, 2)))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
 
     model.add(Convolution2D(512, 3, 3, border_mode='valid'))
     model.add(Activation('relu'))
     model.add(BatchNormalization(epsilon=1e-06, mode=0))
-    model.add(MaxPooling2D(poolsize=(2, 2)))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
 
     model.add(Flatten())
     model.add(Dense(4096, init='normal'))
@@ -274,7 +274,10 @@ def run_cnn(training_images, test_images, settings, test_number):
         t2 = time.time()
         # sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
         adam = Adam()
-        model = VGG_like_convnet((train_x.shape[1], train_x.shape[2], train_x.shape[3]), adam)
+        if settings.method == 'CNN_VGG':
+            model = VGG_like_convnet((train_x.shape[1], train_x.shape[2], train_x.shape[3]), adam)
+        elif settings.method == 'CNN_ALEX':
+            model = AlexNet_like_convnet((train_x.shape[1], train_x.shape[2], train_x.shape[3]), adam)
         nb_params = model.count_params()
 
         # Train model
