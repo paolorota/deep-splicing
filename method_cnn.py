@@ -13,6 +13,7 @@ import os
 import myfilelib as MY
 import h5py
 import matplotlib.pyplot as pl
+from random import shuffle
 
 
 def VGG_like_convnet(data_shape, opt):
@@ -81,22 +82,25 @@ def AlexNet_like_convnet(data_shape, opt):
     model.add(Convolution2D(96, 10, 10, border_mode='valid', input_shape=(data_shape[0], data_shape[1], data_shape[2])))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
 
     model.add(Convolution2D(256, 5, 5, border_mode='valid'))
     model.add(Activation('relu'))
     model.add(BatchNormalization(epsilon=1e-06, mode=0))
     model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
 
-    model.add(Convolution2D(512, 3, 3, border_mode='valid'))
+    model.add(Convolution2D(300, 3, 3, border_mode='valid'))
     model.add(Activation('relu'))
     model.add(BatchNormalization(epsilon=1e-06, mode=0))
     model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
 
     model.add(Flatten())
-    model.add(Dense(4096, init='normal'))
+    model.add(Dense(1024, init='normal'))
     model.add(Activation('relu'))
     model.add(BatchNormalization(epsilon=1e-06, mode=0))
-    model.add(Dense(4096, init='normal'))
+    model.add(Dense(256, init='normal'))
     model.add(Activation('relu'))
     model.add(BatchNormalization(epsilon=1e-06, mode=0))
     model.add(Dense(2))
@@ -130,6 +134,29 @@ def border_patch_sampling(image, patch_size=40, stride=20, b_image=None, b_thr=1
                 patch_list.append(patch)
     # now list containing image as (rows, cols, channels)
     # need to be exported as a ndarray (n_samples, n_channels, n_rows, n_cols)
+    nb_patches = len(patch_list)
+    parray = np.zeros((nb_patches, 3, patch_size, patch_size), dtype=np.float32)
+    for i in range(nb_patches):
+        img = patch_list[i]
+        new_img = np.rollaxis(img, 2, 0)
+        parray[i, :, :, :] = new_img
+    return parray
+
+
+def random_patch_sampling(image, patch_size=40, stride=20, howmany=10):
+    (rows, cols, channels) = image.shape
+    bias_rows = int(round((rows % patch_size) / 2))
+    bias_cols = int(round((cols % patch_size) / 2))
+    patch_list = []
+    for r in range(bias_rows, rows - bias_rows - patch_size, stride):
+        for c in range(bias_cols, cols - bias_cols - patch_size, stride):
+            patch = image[r:r + patch_size, c:c + patch_size, :]
+            patch_list.append(patch)
+    # now list containing image as (rows, cols, channels)
+    # need to be exported as a ndarray (n_samples, n_channels, n_rows, n_cols)
+    nb_patches = len(patch_list)
+    shuffle(patch_list)
+    patch_list = patch_list[0:howmany]
     nb_patches = len(patch_list)
     parray = np.zeros((nb_patches, 3, patch_size, patch_size), dtype=np.float32)
     for i in range(nb_patches):
@@ -220,7 +247,7 @@ def run_cnn(training_images, test_images, settings, test_number):
     nb_training = len(training_images)
     nb_test = len(test_images)
     doLoading = False # used just for printing times in the end
-    useBorders = 1
+    useBorders = 0
 
     # Training model
     modelfileweights = os.path.join(settings.working_folder, 'model{2}_weights_ep{0:02d}_bs{1:02d}.h5'.format(settings.nb_epochs, settings.batch_size, settings.method))
@@ -228,10 +255,10 @@ def run_cnn(training_images, test_images, settings, test_number):
     if not(os.path.exists(modelfileweights) & os.path.exists(modelfilename)):
         # extract patches for training
         t0 = time.time()
-        tmp_filename = 'tmp_training_ts{}.h5'.format(test_number)
+        tmp_filename = 'tmp_training_ts{}_p{}_s{}.h5'.format(test_number, settings.patch_size, settings.patch_stride)
         tmp_filename = os.path.join(settings.working_folder, tmp_filename)
         if os.path.exists(tmp_filename):
-            print('{} found! No need to fetch data again.'.format(tmp_filename))
+            print('Dataset file found! No need to fetch data again: ({})'.format(tmp_filename))
             with h5py.File(tmp_filename, 'r') as f:
                 train_x = f['data'].value
                 train_y = f['label'].value
@@ -241,17 +268,17 @@ def run_cnn(training_images, test_images, settings, test_number):
                                                settings.patch_stride, doBorderSearch=useBorders)
             print('Saving Training set: {}'.format(tmp_filename))
             with h5py.File(tmp_filename, 'w') as f:
-                f.create_dataset('data', data=train_x)
-                f.create_dataset('label', data=train_y)
+                f.create_dataset('data', data=train_x, dtype='float32')
+                f.create_dataset('label', data=train_y, dtype='float32')
                 f.flush()
         train_y = np_utils.to_categorical(train_y, 2)
 
         # extract patches for test
         t1 = time.time()
-        tmp_filename = 'tmp_test_ts{}.h5'.format(test_number)
+        tmp_filename = 'tmp_test_ts{}_p{}_s{}.h5'.format(test_number, settings.patch_size, settings.patch_stride)
         tmp_filename = os.path.join(settings.working_folder, tmp_filename)
         if os.path.exists(tmp_filename):
-            print('{} found! No need to fetch data again.'.format(tmp_filename))
+            print('Dataset file found! No need to fetch data again: ({})'.format(tmp_filename))
             with h5py.File(tmp_filename, 'r') as f:
                 test_x = f['data'].value
                 test_y = f['label'].value
@@ -261,8 +288,8 @@ def run_cnn(training_images, test_images, settings, test_number):
                                              settings.patch_stride, doBorderSearch=useBorders)  # Non necessario se non per validation
             print('Saving Test set: {}'.format(tmp_filename))
             with h5py.File(tmp_filename, 'w') as f:
-                f.create_dataset('data', data=test_x)
-                f.create_dataset('label', data=test_y)
+                f.create_dataset('data', data=test_x, dtype='float32')
+                f.create_dataset('label', data=test_y, dtype='float32')
                 f.flush()
         test_y = np_utils.to_categorical(test_y, 2)
 
@@ -304,6 +331,8 @@ def run_cnn(training_images, test_images, settings, test_number):
         if useBorders:
             img_b = imread(test_images[i].border_image, flatten=True)
             test_x = border_patch_sampling(img, patch_size=40, stride=20, b_image=img_b, b_thr=1)
+            if len(test_x) == 0:
+                test_x = random_patch_sampling(img, patch_size=40, stride=20, howmany=11)
         else:
             test_x = border_patch_sampling(img, patch_size=40, stride=20)
 
@@ -328,4 +357,4 @@ def run_cnn(training_images, test_images, settings, test_number):
     # print('Time for training the model: {}'.format(MY.hms_string(t4 - t3)))
     # print('Time for saving the model: {}'.format(MY.hms_string(t5 - t4)))
     # print('Time for testing model: {}'.format(MY.hms_string(t6 - t5)))
-    return results
+    return results, model

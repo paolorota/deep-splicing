@@ -4,6 +4,7 @@ import random
 import numpy as np
 import time
 from method_cnn import run_cnn
+import pandas as pd
 
 class Settings:
     def __init__(self, filename):
@@ -38,6 +39,8 @@ class TestImage:
             self.border_image = os.path.join(settings.borders_tampered_folder, s[2])
 
 
+def write_preds(preds, fname):
+    pd.DataFrame({"ImageId": list(range(1,len(preds)+1)), "Label": preds}).to_csv(fname, index=False, header=True)
 
 
 def readtestfile(filename, settings):
@@ -87,7 +90,8 @@ def main():
         # try CNN
         if 'CNN' in settings.method:
             print('CNN method')
-            results = run_cnn(training_images, test_images, settings, t)
+            results, model = run_cnn(training_images, test_images, settings, t)
+            nb_params = model.count_params()
         else:
             # try dummy
             print('Dummy method')
@@ -143,6 +147,7 @@ def main():
         if 'CNN' in settings.method:
             s.append('Number of epochs: {}\n'.format(settings.nb_epochs))
             s.append('Batch size: {}\n'.format(settings.batch_size))
+            s.append('NUmber of params in the model: {}\n'.format(nb_params))
 
         # Resutls
         s.append('\n#### RESULTS on IMAGES####\n')
@@ -154,7 +159,11 @@ def main():
         s.append('True Negative: {}\n'.format(int(true_negative)))
         s.append('False Positive: {}\n'.format(int(false_positive)))
         s.append('False Negative: {}\n'.format(int(false_negative)))
+        s.append('\n#### RESULTS on single IMAGES####\n')
         f.writelines(s)
+        json_string = pd.DataFrame({"ImageId": test_images, "Label": results}).to_json()
+        f.write(json_string)
+
 
 
 ########### END ################
