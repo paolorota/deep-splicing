@@ -24,7 +24,7 @@ class Settings:
         self.method = Config.get('Test', 'method')
         self.patch_size = int(Config.get('Test', 'patch_size'))
         self.patch_stride = int(Config.get('Test', 'patch_stride'))
-        self.use_borders = bool(Config.get('Test', 'use_borders'))
+        self.use_borders = bool(int(Config.get('Test', 'use_borders')))
         self.nb_epochs = int(Config.get('NN', 'nb_epochs'))
         self.batch_size = int(Config.get('NN', 'batch_size'))
 

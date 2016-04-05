@@ -159,7 +159,7 @@ def train_cnn(training_h5, test_h5, settings):
         # Train model
         t3 = time.time()
 
-        model.fit(train_x, train_y, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data=(test_x, test_y), shuffle='batch')
+        model.fit(train_x, train_y, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data=(test_x, test_y), shuffle='batch', show_accuracy=True)
         # model.fit({'data_in':train_x, 'class_out':train_y}, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data={'data_in':test_x, 'class_out':test_y})
 
         # Save the model

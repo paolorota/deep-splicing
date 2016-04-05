@@ -7,7 +7,6 @@ from random import shuffle
 from keras.utils import np_utils
 
 
-
 def border_patch_sampling(image, patch_size=40, stride=20, b_image=None, b_thr=1):
     (rows, cols, channels) = image.shape
     bias_rows = int(round((rows % patch_size) / 2))
