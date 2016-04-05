@@ -24,6 +24,7 @@ class Settings:
         self.method = Config.get('Test', 'method')
         self.patch_size = int(Config.get('Test', 'patch_size'))
         self.patch_stride = int(Config.get('Test', 'patch_stride'))
+        self.use_borders = bool(Config.get('Test', 'use_borders'))
         self.nb_epochs = int(Config.get('NN', 'nb_epochs'))
         self.batch_size = int(Config.get('NN', 'batch_size'))
 
@@ -113,12 +114,18 @@ def main():
         test_images = readtestfile(os.path.join(settings.working_folder, test_filelist[t]), settings)
 
         # get or create the dataset if not available (if needed)
+        prename = 'tmp'
+        if settings.use_borders:
+            print('Extracting patches from borders.')
+            prename = 'tmp_borders'
+
         tmp_filename_train, tmp_filename_test = casia.create_database(training_images,
                                                                       test_images,
-                                                                      prename='tmp',
+                                                                      prename=prename,
                                                                       patch_size=settings.patch_size,
                                                                       patch_stride=settings.patch_stride,
-                                                                      working_dir=settings.working_folder)
+                                                                      working_dir=settings.working_folder,
+                                                                      useBorders=settings.use_borders)
         tinit = time.time()
         # train
         if 'CNN' in settings.method:
@@ -151,7 +158,13 @@ def main():
     except:
         os.mkdir(results_dir)
 
-    fileout = settings.method + '.DFresults'
+    # generate time string for results
+    now = time.localtime(time.time())
+    s = '_b{5}_{0:04d}-{1:02d}-{2:02d}_{3:02d}{4:02d}'.format(now.tm_year, now.tm_mon, now.tm_mday,
+                                                              now.tm_hour, now.tm_min,
+                                                              settings.use_borders)
+
+    fileout = settings.method + s + '.DFresults'
     print('Results file: {}'.format(fileout))
     with open(os.path.join(results_dir, fileout), 'w') as f:
         s = []

@@ -98,9 +98,8 @@ def get_patch_array(myimages, description, p_size, p_stride, doBorderSearch=1):
     return x_arr, y_arr
 
 ## Creates the h5 dataset for training and test (test might be used for validation only since it is patch based)
-def create_database(training_images, test_images, prename='tmp', patch_size=40, patch_stride=20, working_dir='.'):
+def create_database(training_images, test_images, prename='tmp', patch_size=40, patch_stride=20, working_dir='.', useBorders=0):
     # Creating model
-    useBorders = 0
     tmp_filename_train = '{}_training_p{}_s{}.h5'.format(prename, patch_size, patch_stride)
     tmp_filename_train = os.path.join(working_dir, tmp_filename_train)
     if not(os.path.exists(tmp_filename_train)):
