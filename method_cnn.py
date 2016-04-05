@@ -14,9 +14,12 @@ import myfilelib as MY
 import h5py
 import matplotlib.pyplot as pl
 from random import shuffle
+from keras.utils.io_utils import HDF5Matrix
+from casiaDB_handler import border_patch_sampling, random_patch_sampling
 
 
 def VGG_like_convnet(data_shape, opt):
+    print('Training VGG net.')
     model = Sequential()
     # input: 100x100 images with 3 channels -> (3, 100, 100) tensors.
     # this applies 32 convolution filters of size 3x3 each.
@@ -78,6 +81,7 @@ def VGG_like_convnet_graph(data_shape, opt):
 
 
 def AlexNet_like_convnet(data_shape, opt):
+    print('Training AlexNet net.')
     model = Sequential()
     model.add(Convolution2D(96, 10, 10, border_mode='valid', input_shape=(data_shape[0], data_shape[1], data_shape[2])))
     model.add(Activation('relu'))
@@ -111,122 +115,6 @@ def AlexNet_like_convnet(data_shape, opt):
     return model
 
 
-def border_patch_sampling(image, patch_size=40, stride=20, b_image=None, b_thr=1):
-    (rows, cols, channels) = image.shape
-    bias_rows = int(round((rows % patch_size) / 2))
-    bias_cols = int(round((cols % patch_size) / 2))
-    patch_list = []
-    for r in range(bias_rows, rows - bias_rows - patch_size, stride):
-        for c in range(bias_cols, cols - bias_cols - patch_size, stride):
-            # check if the border image has a border inside
-            if not(b_image == None):
-                b_patch = b_image[r:r + patch_size, c:c + patch_size]
-                b_patch[b_patch <= 128] = 0
-                # b_patch[b_patch > 128] == 255
-                # pl.imshow(b_patch)
-                # pl.show()
-                if len(b_patch[b_patch == 0]) > float(b_thr) * float(patch_size):
-                    patch = image[r:r + patch_size, c:c + patch_size, :]
-                    patch_list.append(patch)
-            # don't care about borders in this case, get all the patches
-            else:
-                patch = image[r:r + patch_size, c:c + patch_size, :]
-                patch_list.append(patch)
-    # now list containing image as (rows, cols, channels)
-    # need to be exported as a ndarray (n_samples, n_channels, n_rows, n_cols)
-    nb_patches = len(patch_list)
-    parray = np.zeros((nb_patches, 3, patch_size, patch_size), dtype=np.float32)
-    for i in range(nb_patches):
-        img = patch_list[i]
-        new_img = np.rollaxis(img, 2, 0)
-        parray[i, :, :, :] = new_img
-    return parray
-
-
-def random_patch_sampling(image, patch_size=40, stride=20, howmany=10):
-    (rows, cols, channels) = image.shape
-    bias_rows = int(round((rows % patch_size) / 2))
-    bias_cols = int(round((cols % patch_size) / 2))
-    patch_list = []
-    for r in range(bias_rows, rows - bias_rows - patch_size, stride):
-        for c in range(bias_cols, cols - bias_cols - patch_size, stride):
-            patch = image[r:r + patch_size, c:c + patch_size, :]
-            patch_list.append(patch)
-    # now list containing image as (rows, cols, channels)
-    # need to be exported as a ndarray (n_samples, n_channels, n_rows, n_cols)
-    nb_patches = len(patch_list)
-    shuffle(patch_list)
-    patch_list = patch_list[0:howmany]
-    nb_patches = len(patch_list)
-    parray = np.zeros((nb_patches, 3, patch_size, patch_size), dtype=np.float32)
-    for i in range(nb_patches):
-        img = patch_list[i]
-        new_img = np.rollaxis(img, 2, 0)
-        parray[i, :, :, :] = new_img
-    return parray
-
-# def exhaustive_patch_sampling(image, patch_size = 40, stride = 20):
-#     (rows, cols, channels) = image.shape
-#     bias_rows = int(round((rows % patch_size)/2))
-#     bias_cols = int(round((cols % patch_size)/2))
-#     patch_list = []
-#     for r in range(bias_rows, rows - bias_rows - patch_size, stride):
-#         for c in range(bias_cols, cols - bias_cols - patch_size, stride):
-#             patch = image[r:r+patch_size, c:c+patch_size, :]
-#             patch_list.append(patch)
-#     # now list containing image as (rows, cols, channels)
-#     # need to be exported as a ndarray (n_samples, n_channels, n_rows, n_cols)
-#     nb_patches = len(patch_list)
-#     parray = np.zeros((nb_patches, 3, patch_size, patch_size), dtype=np.float32)
-#     for i in range(nb_patches):
-#         img = patch_list[i]
-#         new_img = np.rollaxis(img, 2, 0)
-#         parray[i, :, :, :] = new_img
-#     return parray
-
-
-def get_patch_array(myimages, description, p_size, p_stride, doBorderSearch=1):
-    x_tmp = []
-    y_tmp = []
-    nb_over_patches = 0
-    for i in tqdm(range(len(myimages)), desc=description):
-        # Load an color image in BGR
-        img = imread(myimages[i].image_path, mode='RGB')
-        # img = cv2.imread(myimages[i].image_path, flags=cv2.IMREAD_COLOR)
-        # tmp_plist = exhaustive_patch_sampling(img, patch_size=p_size, stride=p_stride)
-        if doBorderSearch:
-            img_b = imread(myimages[i].border_image, flatten=True)
-            tmp_plist = border_patch_sampling(img, patch_size=p_size, stride=p_stride, b_image=img_b)
-        else:
-            tmp_plist = border_patch_sampling(img, patch_size=p_size, stride=p_stride)
-        nb_samples = int(tmp_plist.shape[0])
-        if myimages[i].label == 0:
-            tmp_labels = np.zeros((nb_samples, 1), dtype=np.float32)
-        elif myimages[i].label == 1:
-            tmp_labels = np.ones((nb_samples, 1), dtype=np.float32)
-        else:
-            raise ("A label different fro 0 and 1 is not possible.")
-        # Creation of the training set
-        x_tmp.append(tmp_plist)
-        y_tmp.append(tmp_labels)
-        nb_over_patches += len(tmp_labels)
-    # generate the final array
-    p_shape = x_tmp[0].shape
-    x_arr = np.zeros((nb_over_patches, p_shape[1], p_shape[2], p_shape[3]), dtype=np.float32)
-    y_arr = np.zeros((nb_over_patches, 1), dtype=np.float32)
-    #print('DEBUG: pshape: {} && x_arr: {}'.format(p_shape, x_arr.shape))
-    c = 0
-    for i in tqdm(range(len(myimages)), desc='Conversion to array'):
-        single_image_patches = x_tmp[i]
-        single_image_targets = y_tmp[i]
-        pack_size = len(single_image_patches)
-        x_arr[c:c+pack_size, :, :, :] = single_image_patches
-        y_arr[c:c+pack_size, :] = single_image_targets
-        c += pack_size
-    #print('DEBUG: pack_size: {} (must be: {})'.format(c, nb_over_patches))
-    return x_arr, y_arr
-
-
 def read_model_from_disk(weights_path, model_path):
     assert os.path.exists(model_path), 'Model json not found (see "model_path" variable in script).'
     model = model_from_json(open(model_path).read())
@@ -243,74 +131,35 @@ def read_model_from_disk(weights_path, model_path):
     return model
 
 
-def run_cnn(training_images, test_images, settings, test_number):
-    nb_training = len(training_images)
-    nb_test = len(test_images)
-    doLoading = False # used just for printing times in the end
-    useBorders = 0
+def train_cnn(training_h5, test_h5, settings):
+    with h5py.File(training_h5, 'r') as f:
+        training_size = f.values()[0].shape
+        print('Training size: {}'.format(training_size))
+    with h5py.File(test_h5, 'r') as f:
+        test_size = f.values()[0].shape
 
     # Training model
     modelfileweights = os.path.join(settings.working_folder, 'model{2}_weights_ep{0:02d}_bs{1:02d}.h5'.format(settings.nb_epochs, settings.batch_size, settings.method))
     modelfilename = os.path.join(settings.working_folder, 'model{2}_ep{0:02d}_bs{1:02d}.json'.format(settings.nb_epochs, settings.batch_size, settings.method))
     if not(os.path.exists(modelfileweights) & os.path.exists(modelfilename)):
-        # extract patches for training
-        t0 = time.time()
-        tmp_filename = 'tmp_training_ts{}_p{}_s{}.h5'.format(test_number, settings.patch_size, settings.patch_stride)
-        tmp_filename = os.path.join(settings.working_folder, tmp_filename)
-        if os.path.exists(tmp_filename):
-            print('Dataset file found! No need to fetch data again: ({})'.format(tmp_filename))
-            with h5py.File(tmp_filename, 'r') as f:
-                train_x = f['data'].value
-                train_y = f['label'].value
-        else:
-            print('{} not found! Need to fetch data.'.format(tmp_filename))
-            train_x, train_y = get_patch_array(training_images, 'Creation of training set', settings.patch_size,
-                                               settings.patch_stride, doBorderSearch=useBorders)
-            print('Saving Training set: {}'.format(tmp_filename))
-            with h5py.File(tmp_filename, 'w') as f:
-                f.create_dataset('data', data=train_x, dtype='float32')
-                f.create_dataset('label', data=train_y, dtype='float32')
-                f.flush()
-        train_y = np_utils.to_categorical(train_y, 2)
-
-        # extract patches for test
-        t1 = time.time()
-        tmp_filename = 'tmp_test_ts{}_p{}_s{}.h5'.format(test_number, settings.patch_size, settings.patch_stride)
-        tmp_filename = os.path.join(settings.working_folder, tmp_filename)
-        if os.path.exists(tmp_filename):
-            print('Dataset file found! No need to fetch data again: ({})'.format(tmp_filename))
-            with h5py.File(tmp_filename, 'r') as f:
-                test_x = f['data'].value
-                test_y = f['label'].value
-        else:
-            print('{} not found! Need to fetch data.'.format(tmp_filename))
-            test_x, test_y = get_patch_array(test_images, 'Creation of test set', settings.patch_size,
-                                             settings.patch_stride, doBorderSearch=useBorders)  # Non necessario se non per validation
-            print('Saving Test set: {}'.format(tmp_filename))
-            with h5py.File(tmp_filename, 'w') as f:
-                f.create_dataset('data', data=test_x, dtype='float32')
-                f.create_dataset('label', data=test_y, dtype='float32')
-                f.flush()
-        test_y = np_utils.to_categorical(test_y, 2)
-
-        # Normalization
-        train_x = train_x / 255
-        test_x = test_x / 255
-
-        # Create Model
-        t2 = time.time()
         # sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
         adam = Adam()
         if settings.method == 'CNN_VGG':
-            model = VGG_like_convnet((train_x.shape[1], train_x.shape[2], train_x.shape[3]), adam)
+            model = VGG_like_convnet((training_size[1], training_size[2], training_size[3]), adam)
         elif settings.method == 'CNN_ALEX':
-            model = AlexNet_like_convnet((train_x.shape[1], train_x.shape[2], train_x.shape[3]), adam)
+            model = AlexNet_like_convnet((training_size[1], training_size[2], training_size[3]), adam)
         nb_params = model.count_params()
+
+        # Get data out of the H5 dataset =
+        train_x = HDF5Matrix(training_h5, 'data', 0, training_size[0])
+        train_y = HDF5Matrix(training_h5, 'label', 0, training_size[0])
+        test_x = HDF5Matrix(test_h5, 'data', 0, training_size[0])
+        test_y = HDF5Matrix(test_h5, 'label', 0, training_size[0])
 
         # Train model
         t3 = time.time()
 
-        model.fit(train_x, train_y, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data=(test_x, test_y))
+        model.fit(train_x, train_y, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data=(test_x, test_y), shuffle=False)
         # model.fit({'data_in':train_x, 'class_out':train_y}, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data={'data_in':test_x, 'class_out':test_y})
 
         # Save the model
@@ -321,11 +170,14 @@ def run_cnn(training_images, test_images, settings, test_number):
     else:
         print('Read model from file.')
         model = read_model_from_disk(modelfileweights, modelfilename)
+    return model
 
+
+def test_cnn(test_images, model, batch_size=256, useBorders = 0):
     ###### Test model #####
-    t5 = time.time()
-    results = np.zeros((nb_test, 1))
-    for i in range(nb_test):
+    tinit = time.time()
+    results = np.zeros((len(test_images), 1))
+    for i in range(len(test_images)):
         img = imread(test_images[i].image_path, mode='RGB')
         # img = cv2.imread(test_images[i].image_path, flags=cv2.IMREAD_COLOR)
         if useBorders:
@@ -341,7 +193,7 @@ def run_cnn(training_images, test_images, settings, test_number):
         # prediction = model.predict_classes({'data_in':test_x}, batch_size=settings.batch_size, verbose=True)
         # nb_0 = len(prediction['class_out'].argwhere(0))
         # nb_1 = len(prediction['class_out'].argwhere(1))
-        prediction = model.predict_classes(test_x, batch_size=settings.batch_size, verbose=True)
+        prediction = model.predict_classes(test_x, batch_size=batch_size, verbose=True)
         nb_0 = len(np.argwhere(prediction == 0))
         nb_1 = len(np.argwhere(prediction == 1))
         if nb_0 > nb_1:
@@ -350,11 +202,11 @@ def run_cnn(training_images, test_images, settings, test_number):
             pred = 1
         results[i, 0] = pred
 
-    t6 = time.time()
+    tend = time.time()
     # print('Time get training samples: {}'.format(MY.hms_string(t1 - t0)))
     # print('Time get test samples: {}'.format(MY.hms_string(t2 - t1)))
     # print('Time to generate the model: {}'.format(MY.hms_string(t3 - t2)))
     # print('Time for training the model: {}'.format(MY.hms_string(t4 - t3)))
     # print('Time for saving the model: {}'.format(MY.hms_string(t5 - t4)))
-    # print('Time for testing model: {}'.format(MY.hms_string(t6 - t5)))
-    return results, model
+    print('Time for testing model: {}'.format(MY.hms_string(tend - tinit)))
+    return results

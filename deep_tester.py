@@ -3,8 +3,10 @@ import os, sys, glob
 import random
 import numpy as np
 import time
-from method_cnn import run_cnn
+from method_cnn import train_cnn, test_cnn
 import pandas as pd
+import casiaDB_handler as casia
+
 
 class Settings:
     def __init__(self, filename):
@@ -86,12 +88,20 @@ def main():
         training_images = readtestfile(os.path.join(settings.working_folder, training_filelist[t]), settings)
         test_images = readtestfile(os.path.join(settings.working_folder, test_filelist[t]), settings)
 
+        # get or create the dataset if not available (if needed)
+        tmp_filename_train, tmp_filename_test = casia.create_database(training_images,
+                                                                      test_images,
+                                                                      prename='tmp',
+                                                                      patch_size=settings.patch_size,
+                                                                      patch_stride=settings.patch_stride,
+                                                                      working_dir=settings.working_folder)
         tinit = time.time()
-        # try CNN
+        # train
         if 'CNN' in settings.method:
-            print('CNN method')
-            results, model = run_cnn(training_images, test_images, settings, t)
+            print('Method: {}'.format(settings.method))
+            model = train_cnn(tmp_filename_train, tmp_filename_test, settings)
             nb_params = model.count_params()
+            results = test_cnn(test_images, model)
         else:
             # try dummy
             print('Dummy method')
