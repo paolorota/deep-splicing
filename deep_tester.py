@@ -27,6 +27,7 @@ class Settings:
         self.nb_epochs = int(Config.get('NN', 'nb_epochs'))
         self.batch_size = int(Config.get('NN', 'batch_size'))
 
+
 class TestImage:
     def __init__(self, text, settings):
         s = text.split(',')
@@ -64,6 +65,29 @@ def dummymethod(training_images, test_images):
         if round(random.random())> 0.5:
             results[i, 0] = 1
     return results
+
+
+def extractStats(confmat):
+    # get stats
+    true_positive = confmat[1, 1]
+    true_negative = confmat[0, 0]
+    false_positive = confmat[0, 1]
+    false_negative = confmat[1, 0]
+    accuracy = (true_positive + true_negative) / (confmat.sum())
+    precision = true_positive / (true_positive + false_positive)
+    recall = true_positive / (true_positive + false_negative)
+    fscore = 2 * precision * recall / (precision + recall)
+
+    resstring = ['## Stats ##\n']
+    resstring.append('True Positive: {}\n'.format(int(true_positive)))
+    resstring.append('True Negative: {}'.format(int(true_negative)))
+    resstring.append('False Positive: {}'.format(int(false_positive)))
+    resstring.append('False Negative: {}'.format(int(false_negative)))
+    resstring.append('Accuracy: {}'.format(accuracy))
+    resstring.append('Precision: {}'.format(precision))
+    resstring.append('Recall: {}'.format(recall))
+    resstring.append('F-score: {}'.format(fscore))
+    return resstring
 
 
 def main():
@@ -117,26 +141,7 @@ def main():
         cumulative_confmat += confmat
 
     # get stats
-    true_positive = cumulative_confmat[1, 1]
-    true_negative = cumulative_confmat[0, 0]
-    false_positive = cumulative_confmat[0, 1]
-    false_negative = cumulative_confmat[1, 0]
-    accuracy = (true_positive + true_negative)/(cumulative_confmat.sum())
-    precision = true_positive / (true_positive + false_positive)
-    recall = true_positive / (true_positive + false_negative)
-    fscore = 2 * precision * recall / (precision + recall)
-
-    # print
-    print("Training-test time: {} secs".format(tend - tinit))
-    print('## Results ##')
-    print('True Positive: {}'.format(int(true_positive)))
-    print('True Negative: {}'.format(int(true_negative)))
-    print('False Positive: {}'.format(int(false_positive)))
-    print('False Negative: {}'.format(int(false_negative)))
-    print('Accuracy: {}'.format(accuracy))
-    print('Precision: {}'.format(precision))
-    print('Recall: {}'.format(recall))
-    print('F-score: {}'.format(fscore))
+    statlist = extractStats(cumulative_confmat)
 
     # Exproting results on file
     results_dir = os.path.join(settings.working_folder, 'results')
@@ -157,20 +162,11 @@ def main():
         if 'CNN' in settings.method:
             s.append('Number of epochs: {}\n'.format(settings.nb_epochs))
             s.append('Batch size: {}\n'.format(settings.batch_size))
-            s.append('NUmber of params in the model: {}\n'.format(nb_params))
-
-        # Resutls
-        s.append('\n#### RESULTS on IMAGES####\n')
-        s.append('Accuracy on images: {}\n'.format(accuracy))
-        s.append('Precision on images: {}\n'.format(precision))
-        s.append('Recall on images: {}\n'.format(recall))
-        s.append('F-Score on images: {}\n'.format(fscore))
-        s.append('True Positive: {}\n'.format(int(true_positive)))
-        s.append('True Negative: {}\n'.format(int(true_negative)))
-        s.append('False Positive: {}\n'.format(int(false_positive)))
-        s.append('False Negative: {}\n'.format(int(false_negative)))
-        s.append('\n#### RESULTS on single IMAGES####\n')
+            s.append('Number of params in the model: {}\n'.format(nb_params))
+            s.append('Model architecture: {}\n'.format(model.to_yaml()))
         f.writelines(s)
+        f.writelines(statlist)
+        f.write('\n#### RESULTS on single IMAGES####\n')
         json_string = pd.DataFrame({"ImageId": test_images, "Label": results}).to_json()
         f.write(json_string)
 
