@@ -180,7 +180,7 @@ def main():
         f.writelines(s)
         f.writelines(statlist)
         f.write('\n#### RESULTS on single IMAGES####\n')
-        json_string = pd.DataFrame({"ImageId": test_images, "Label": results}).to_json()
+        json_string = pd.DataFrame({"ImageId": test_images, "Label": results.tolist()}).to_json()
         f.write(json_string)
 
 
