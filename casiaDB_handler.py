@@ -111,10 +111,12 @@ def create_database(training_images, test_images, prename='tmp', patch_size=40, 
             f.create_dataset('data', data=train_x, dtype='float32')
             f.create_dataset('label', data=train_y, dtype='float32')
             f.flush()
+    else:
+        print('Loading DB training: {}'.format(tmp_filename_train))
 
     # extract patches for test
     tmp_filename_test = '{}_test_p{}_s{}.h5'.format(prename, patch_size, patch_stride)
-    tmp_filename_test = os.path.join(working_dir, tmp_filename_train)
+    tmp_filename_test = os.path.join(working_dir, tmp_filename_test)
     if not(os.path.exists(tmp_filename_test)):
         print('{} not found! Need to fetch data.'.format(tmp_filename_test))
         test_x, test_y = get_patch_array(test_images, 'Creation of test set', patch_size,
@@ -126,4 +128,6 @@ def create_database(training_images, test_images, prename='tmp', patch_size=40, 
             f.create_dataset('data', data=test_x, dtype='float32')
             f.create_dataset('label', data=test_y, dtype='float32')
             f.flush()
+    else:
+        print('Loading DB test: {}'.format(tmp_filename_test))
     return tmp_filename_train, tmp_filename_test

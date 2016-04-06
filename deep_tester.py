@@ -81,13 +81,13 @@ def extractStats(confmat):
 
     resstring = ['## Stats ##\n']
     resstring.append('True Positive: {}\n'.format(int(true_positive)))
-    resstring.append('True Negative: {}'.format(int(true_negative)))
-    resstring.append('False Positive: {}'.format(int(false_positive)))
-    resstring.append('False Negative: {}'.format(int(false_negative)))
-    resstring.append('Accuracy: {}'.format(accuracy))
-    resstring.append('Precision: {}'.format(precision))
-    resstring.append('Recall: {}'.format(recall))
-    resstring.append('F-score: {}'.format(fscore))
+    resstring.append('True Negative: {}\n'.format(int(true_negative)))
+    resstring.append('False Positive: {}\n'.format(int(false_positive)))
+    resstring.append('False Negative: {}\n'.format(int(false_negative)))
+    resstring.append('Accuracy: {}\n'.format(accuracy))
+    resstring.append('Precision: {}\n'.format(precision))
+    resstring.append('Recall: {}\n'.format(recall))
+    resstring.append('F-score: {}\n'.format(fscore))
     return resstring
 
 
@@ -176,7 +176,7 @@ def main():
             s.append('Number of epochs: {}\n'.format(settings.nb_epochs))
             s.append('Batch size: {}\n'.format(settings.batch_size))
             s.append('Number of params in the model: {}\n'.format(nb_params))
-            s.append('Model architecture: {}\n'.format(model.to_yaml()))
+            s.append('Model architecture: {}\n'.format('model{2}_ep{0:02d}_bs{1:02d}.json'.format(settings.nb_epochs, settings.batch_size, settings.method)))
         f.writelines(s)
         f.writelines(statlist)
         f.write('\n#### RESULTS on single IMAGES####\n')
