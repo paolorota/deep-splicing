@@ -107,6 +107,11 @@ def create_database(training_images, test_images, prename='tmp', patch_size=40, 
                                            patch_stride, doBorderSearch=useBorders)
         print('Normalization of the training set.')
         train_x = train_x / 255
+        print('Shuffling data')
+        order = range(len(train_x))
+        shuffle(order)
+        train_x = train_x[order, :, :, :]
+        train_y = train_y[order, :]
         # labels to categorical
         train_y = np_utils.to_categorical(train_y, 2)
         print('Saving Training set: {}'.format(tmp_filename_train))
