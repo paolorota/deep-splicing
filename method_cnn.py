@@ -10,7 +10,6 @@ import numpy as np
 from tqdm import tqdm
 import time
 import os
-import myfilelib as MY
 import h5py
 import matplotlib.pyplot as pl
 from random import shuffle
@@ -137,10 +136,11 @@ def train_cnn(training_h5, test_h5, settings):
         print('Training size: {}'.format(training_size))
     with h5py.File(test_h5, 'r') as f:
         test_size = f.values()[0].shape
+        print('Test size: {}'.format(test_size))
 
     # Training model
-    modelfileweights = os.path.join(settings.working_folder, 'model{2}_weights_ep{0:02d}_bs{1:02d}.h5'.format(settings.nb_epochs, settings.batch_size, settings.method))
-    modelfilename = os.path.join(settings.working_folder, 'model{2}_ep{0:02d}_bs{1:02d}.json'.format(settings.nb_epochs, settings.batch_size, settings.method))
+    modelfileweights = os.path.join(settings.working_folder, 'model{2}_b{3}_weights_ep{0:02d}_bs{1:02d}.h5'.format(settings.nb_epochs, settings.batch_size, settings.method, settings.use_borders))
+    modelfilename = os.path.join(settings.working_folder, 'model{2}_b{3}_ep{0:02d}_bs{1:02d}.json'.format(settings.nb_epochs, settings.batch_size, settings.method, settings.use_borders))
     if not(os.path.exists(modelfileweights) & os.path.exists(modelfilename)):
         # sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
         adam = Adam()
@@ -153,8 +153,8 @@ def train_cnn(training_h5, test_h5, settings):
         # Get data out of the H5 dataset =
         train_x = HDF5Matrix(training_h5, 'data', 0, training_size[0])
         train_y = HDF5Matrix(training_h5, 'label', 0, training_size[0])
-        test_x = HDF5Matrix(test_h5, 'data', 0, training_size[0])
-        test_y = HDF5Matrix(test_h5, 'label', 0, training_size[0])
+        test_x = HDF5Matrix(test_h5, 'data', 0, test_size[0])
+        test_y = HDF5Matrix(test_h5, 'label', 0, test_size[0])
 
         # Train model
         t3 = time.time()
@@ -203,10 +203,5 @@ def test_cnn(test_images, model, batch_size=256, useBorders = 0):
         results[i, 0] = pred
 
     tend = time.time()
-    # print('Time get training samples: {}'.format(MY.hms_string(t1 - t0)))
-    # print('Time get test samples: {}'.format(MY.hms_string(t2 - t1)))
-    # print('Time to generate the model: {}'.format(MY.hms_string(t3 - t2)))
-    # print('Time for training the model: {}'.format(MY.hms_string(t4 - t3)))
-    # print('Time for saving the model: {}'.format(MY.hms_string(t5 - t4)))
-    print('Time for testing model: {}'.format(MY.hms_string(tend - tinit)))
+
     return results

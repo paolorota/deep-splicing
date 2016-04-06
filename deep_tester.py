@@ -6,6 +6,7 @@ import time
 from method_cnn import train_cnn, test_cnn
 import pandas as pd
 import casiaDB_handler as casia
+import myfilelib as MY
 
 
 class Settings:
@@ -131,11 +132,13 @@ def main():
         if 'CNN' in settings.method:
             print('Method: {}'.format(settings.method))
             model = train_cnn(tmp_filename_train, tmp_filename_test, settings)
+            ttrain = time.time()
             nb_params = model.count_params()
             results = test_cnn(test_images, model)
         else:
             # try dummy
             print('Dummy method')
+            ttrain = tinit
             results = dummymethod(training_images, test_images)
         tend = time.time()
 
@@ -172,6 +175,7 @@ def main():
         s.append('Method: {}\n'.format(settings.method))
         s.append('Patch size: {}\n'.format(settings.patch_size))
         s.append('Patch minimum stride: {}\n'.format(settings.patch_stride))
+        s.append('Extract patches from borders: {}\n'.format(settings.use_borders))
         if 'CNN' in settings.method:
             s.append('Number of epochs: {}\n'.format(settings.nb_epochs))
             s.append('Batch size: {}\n'.format(settings.batch_size))
@@ -183,7 +187,13 @@ def main():
         json_string = pd.DataFrame({"ImageId": test_images, "Label": results.tolist()}).to_json()
         f.write(json_string)
 
-
+    # Timing
+    print('Time get training samples: {}'.format(MY.hms_string(ttrain - tinit)))
+    # print('Time get test samples: {}'.format(MY.hms_string(t2 - t1)))
+    # print('Time to generate the model: {}'.format(MY.hms_string(t3 - t2)))
+    # print('Time for training the model: {}'.format(MY.hms_string(t4 - t3)))
+    # print('Time for saving the model: {}'.format(MY.hms_string(t5 - t4)))
+    print('Time for testing model: {}'.format(MY.hms_string(tend - ttrain)))
 
 ########### END ################
 
