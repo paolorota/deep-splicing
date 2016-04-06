@@ -105,6 +105,9 @@ def create_database(training_images, test_images, prename='tmp', patch_size=40, 
         print('{} not found! Need to fetch data.'.format(tmp_filename_train))
         train_x, train_y = get_patch_array(training_images, 'Creation of training set', patch_size,
                                            patch_stride, doBorderSearch=useBorders)
+        print('Normalization of the training set.')
+        train_x = train_x / 255
+        # labels to categorical
         train_y = np_utils.to_categorical(train_y, 2)
         print('Saving Training set: {}'.format(tmp_filename_train))
         with h5py.File(tmp_filename_train, 'w') as f:
@@ -122,6 +125,9 @@ def create_database(training_images, test_images, prename='tmp', patch_size=40, 
         test_x, test_y = get_patch_array(test_images, 'Creation of test set', patch_size,
                                          patch_stride,
                                          doBorderSearch=useBorders)  # Non necessario se non per validation
+        print('Normalization of the test set.')
+        test_x = test_x / 255
+        # labels to categorical
         test_y = np_utils.to_categorical(test_y, 2)
         print('Saving Test set: {}'.format(tmp_filename_test))
         with h5py.File(tmp_filename_test, 'w') as f:
