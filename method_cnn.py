@@ -177,6 +177,8 @@ def test_cnn(test_images, model, batch_size=256, useBorders = 0):
     ###### Test model #####
     tinit = time.time()
     results = np.zeros((len(test_images), 1))
+    results_probabilities = np.zeros((len(test_images), 2))
+
     for i in range(len(test_images)):
         img = imread(test_images[i].image_path, mode='RGB')
         # img = cv2.imread(test_images[i].image_path, flags=cv2.IMREAD_COLOR)
@@ -190,18 +192,25 @@ def test_cnn(test_images, model, batch_size=256, useBorders = 0):
 
         # Normalization
         test_x = test_x / 255
-        # prediction = model.predict_classes({'data_in':test_x}, batch_size=settings.batch_size, verbose=True)
-        # nb_0 = len(prediction['class_out'].argwhere(0))
-        # nb_1 = len(prediction['class_out'].argwhere(1))
-        prediction = model.predict_classes(test_x, batch_size=batch_size, verbose=True)
-        nb_0 = len(np.argwhere(prediction == 0))
-        nb_1 = len(np.argwhere(prediction == 1))
-        if nb_0 > nb_1:
+        prediction_probabilities = model.predict_proba(test_x, batch_size=32, verbose=1)
+        prediction_probabilities = prediction_probabilities.mean(0)
+        if prediction_probabilities[0] > prediction_probabilities[1]:
             pred = 0
         else:
             pred = 1
+
+        # Old Version
+        # prediction = model.predict_classes(test_x, batch_size=batch_size, verbose=True)
+        # nb_0 = len(np.argwhere(prediction == 0))
+        # nb_1 = len(np.argwhere(prediction == 1))
+        # if nb_0 > nb_1:
+        #     pred = 0
+        # else:
+        #     pred = 1
+
         results[i, 0] = pred
+        results_probabilities[i, :] = prediction_probabilities
 
     tend = time.time()
 
-    return results
+    return results, results_probabilities

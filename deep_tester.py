@@ -7,6 +7,7 @@ from method_cnn import train_cnn, test_cnn
 import pandas as pd
 import casiaDB_handler as casia
 import myfilelib as MY
+from auccreator import getAUC
 
 
 class Settings:
@@ -69,7 +70,7 @@ def dummymethod(training_images, test_images):
     return results
 
 
-def extractStats(confmat):
+def extractStats(confmat, auc):
     # get stats
     true_positive = confmat[1, 1]
     true_negative = confmat[0, 0]
@@ -89,6 +90,7 @@ def extractStats(confmat):
     resstring.append('Precision: {}\n'.format(precision))
     resstring.append('Recall: {}\n'.format(recall))
     resstring.append('F-score: {}\n'.format(fscore))
+    resstring.append('AUC: {}\n'.format(auc))
     return resstring
 
 
@@ -99,6 +101,7 @@ def main():
     else:
         settingsFileName = 'config.ini'
     settings = Settings(settingsFileName)
+    results_dir = os.path.join(settings.working_folder, 'results')
     isDebug = 1
 
     # search for training and test files
@@ -110,6 +113,7 @@ def main():
         nb_tests = 1
 
     cumulative_confmat = np.zeros((2,2))
+    auc_list = []
     for t in range(nb_tests):
         training_images = readtestfile(os.path.join(settings.working_folder, training_filelist[t]), settings)
         test_images = readtestfile(os.path.join(settings.working_folder, test_filelist[t]), settings)
@@ -134,7 +138,7 @@ def main():
             model = train_cnn(tmp_filename_train, tmp_filename_test, settings)
             ttrain = time.time()
             nb_params = model.count_params()
-            results = test_cnn(test_images, model)
+            results, probabilities = test_cnn(test_images, model)
         else:
             # try dummy
             print('Dummy method')
@@ -143,18 +147,24 @@ def main():
         tend = time.time()
 
         # calc confusion matrix
+        labels = np.zeros(results.shape)
         confmat = np.zeros((2,2))
         for i in range(len(test_images)):
             label = test_images[i].label
-            prediction = results[i,0]
+            labels[i, 0] = label
+            prediction = int(results[i,0])
             confmat[label, prediction] += 1
         cumulative_confmat += confmat
+        path_auc = os.path.join(results_dir, 'ROC_m{}_b{}_t{}.pdf'.format(settings.method, settings.use_borders, t))
+        print('Saving auc image: {}'.format(path_auc))
+        a, fpr, tpr = getAUC(labels, probabilities[:, 1], saveas=path_auc)
+        auc_list.append(a)
 
     # get stats
-    statlist = extractStats(cumulative_confmat)
-
+    auc = np.asarray(auc_list).mean() # this works only when testset == 1
+    statlist = extractStats(cumulative_confmat, auc)
     # Exproting results on file
-    results_dir = os.path.join(settings.working_folder, 'results')
+
     print('Results folder: {}'.format(results_dir))
     try:
         os.stat(results_dir)
