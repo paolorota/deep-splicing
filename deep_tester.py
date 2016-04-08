@@ -104,6 +104,12 @@ def main():
     results_dir = os.path.join(settings.working_folder, 'results')
     isDebug = 1
 
+    try:
+        os.stat(results_dir)
+    except:
+        print('Creating results folder: {}'.format(results_dir))
+        os.mkdir(results_dir)
+
     # search for training and test files
     training_filelist = glob.glob1(settings.working_folder, 'training*')
     test_filelist = glob.glob1(settings.working_folder, 'test*')
@@ -160,16 +166,11 @@ def main():
         a, fpr, tpr = getAUC(labels, probabilities[:, 1], saveas=path_auc)
         auc_list.append(a)
 
-    # get stats
-    auc = np.asarray(auc_list).mean() # this works only when testset == 1
-    statlist = extractStats(cumulative_confmat, auc)
-    # Exproting results on file
 
-    print('Results folder: {}'.format(results_dir))
-    try:
-        os.stat(results_dir)
-    except:
-        os.mkdir(results_dir)
+    # Exproting results on file
+    # get stats
+    auc = np.asarray(auc_list).mean()  # this works only when testset == 1
+    statlist = extractStats(cumulative_confmat, auc)
 
     # generate time string for results
     now = time.localtime(time.time())

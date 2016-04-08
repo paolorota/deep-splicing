@@ -17,6 +17,36 @@ from keras.utils.io_utils import HDF5Matrix
 from casiaDB_handler import border_patch_sampling, random_patch_sampling
 
 
+def VGG_like_convnet_graph(data_shape, opt):
+    # create a network
+    model = Graph()
+    model.add_input(name='data_in', input_shape=(data_shape[0], data_shape[1], data_shape[2]))
+    model.add_node(Convolution2D(32, 3, 3, border_mode='valid'), name='conv1', input='data_in')
+    model.add_node(Activation('relu'), name='relu1', input='conv1')
+    model.add_node(Convolution2D(32, 3, 3), name='conv2', input='relu1')
+    model.add_node(Activation('relu'), name='relu2', input='conv2')
+    model.add_node(MaxPooling2D(pool_size=(2, 2)), name='pool1', input='relu2')
+    # model.add(Dropout(0.25))
+
+    model.add_node(Convolution2D(64, 3, 3, border_mode='valid'), name='conv3', input='pool1')
+    model.add_node(Activation('relu'), name='relu3', input='conv3')
+    model.add_node(Convolution2D(64, 3, 3), name='conv4', input='relu3')
+    model.add_node(Activation('relu'), name='relu4', input='conv4')
+    model.add_node(MaxPooling2D(pool_size=(2, 2)), name='pool2', input='relu4')
+    # model.add(Dropout(0.25))
+
+    model.add_node(Flatten(), name='flatten', input='pool2')
+    model.add_node(Dense(256), name='dense1', input='flatten')
+    model.add_node(Activation('relu'), name='relu5', input='dense1')
+
+    model.add_node(Dense(2), name='dense2', input='relu5')
+    model.add_node(Activation('softmax'), name='softmax_out', input='dense2')
+    model.add_output(name='class_out', input='softmax_out')
+    print ('VGG_like_convnet_graph... nb params: {}'.format(model.count_params()))
+    model.compile(loss={'class_out':'categorical_crossentropy'}, optimizer=opt)
+    return model
+
+
 def VGG_like_convnet(data_shape, opt):
     print('Training VGG net.')
     model = Sequential()
@@ -49,63 +79,37 @@ def VGG_like_convnet(data_shape, opt):
     model.compile(loss='categorical_crossentropy', optimizer=opt)
     return model
 
-def VGG_like_convnet_graph(data_shape, opt):
-    # create a network
-    model = Graph()
-    model.add_input(name='data_in', input_shape=(data_shape[0], data_shape[1], data_shape[2]))
-    model.add_node(Convolution2D(32, 3, 3, border_mode='valid'), name='conv1', input='data_in')
-    model.add_node(Activation('relu'), name='relu1', input='conv1')
-    model.add_node(Convolution2D(32, 3, 3), name='conv2', input='relu1')
-    model.add_node(Activation('relu'), name='relu2', input='conv2')
-    model.add_node(MaxPooling2D(pool_size=(2, 2)), name='pool1', input='relu2')
-    # model.add(Dropout(0.25))
-
-    model.add_node(Convolution2D(64, 3, 3, border_mode='valid'), name='conv3', input='pool1')
-    model.add_node(Activation('relu'), name='relu3', input='conv3')
-    model.add_node(Convolution2D(64, 3, 3), name='conv4', input='relu3')
-    model.add_node(Activation('relu'), name='relu4', input='conv4')
-    model.add_node(MaxPooling2D(pool_size=(2, 2)), name='pool2', input='relu4')
-    # model.add(Dropout(0.25))
-
-    model.add_node(Flatten(), name='flatten', input='pool2')
-    model.add_node(Dense(256), name='dense1', input='flatten')
-    model.add_node(Activation('relu'), name='relu5', input='dense1')
-
-    model.add_node(Dense(2), name='dense2', input='relu5')
-    model.add_node(Activation('softmax'), name='softmax_out', input='dense2')
-    model.add_output(name='class_out', input='softmax_out')
-    print ('VGG_like_convnet_graph... nb params: {}'.format(model.count_params()))
-    model.compile(loss={'class_out':'categorical_crossentropy'}, optimizer=opt)
-    return model
-
 
 def AlexNet_like_convnet(data_shape, opt):
     print('Training AlexNet net.')
     model = Sequential()
     model.add(Convolution2D(96, 10, 10, border_mode='valid', input_shape=(data_shape[0], data_shape[1], data_shape[2])))
     model.add(Activation('relu'))
+    #model.add(BatchNormalization(epsilon=1e-06, mode=0))
     model.add(MaxPooling2D(pool_size=(2, 2)))
     model.add(Dropout(0.25))
 
-    model.add(Convolution2D(256, 5, 5, border_mode='valid'))
+    model.add(Convolution2D(128, 5, 5, border_mode='valid'))
     model.add(Activation('relu'))
-    model.add(BatchNormalization(epsilon=1e-06, mode=0))
+    #model.add(BatchNormalization(epsilon=1e-06, mode=0))
     model.add(MaxPooling2D(pool_size=(2, 2)))
     model.add(Dropout(0.25))
 
-    model.add(Convolution2D(300, 3, 3, border_mode='valid'))
+    model.add(Convolution2D(256, 3, 3, border_mode='valid'))
     model.add(Activation('relu'))
-    model.add(BatchNormalization(epsilon=1e-06, mode=0))
+    #model.add(BatchNormalization(epsilon=1e-06, mode=0))
     model.add(MaxPooling2D(pool_size=(2, 2)))
     model.add(Dropout(0.25))
 
     model.add(Flatten())
-    model.add(Dense(1024, init='normal'))
+    model.add(Dense(768, init='normal'))
     model.add(Activation('relu'))
-    model.add(BatchNormalization(epsilon=1e-06, mode=0))
+    model.add(Dropout(0.5))
+    #model.add(BatchNormalization(epsilon=1e-06, mode=0))
     model.add(Dense(256, init='normal'))
     model.add(Activation('relu'))
-    model.add(BatchNormalization(epsilon=1e-06, mode=0))
+    model.add(Dropout(0.5))
+    #model.add(BatchNormalization(epsilon=1e-06, mode=0))
     model.add(Dense(2))
     model.add(Activation('softmax'))
 
@@ -144,9 +148,9 @@ def train_cnn(training_h5, test_h5, settings):
     if not(os.path.exists(modelfileweights) & os.path.exists(modelfilename)):
         # sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
         adam = Adam()
-        if settings.method == 'CNN_VGG':
+        if 'CNN_VGG' in settings.method:
             model = VGG_like_convnet((training_size[1], training_size[2], training_size[3]), adam)
-        elif settings.method == 'CNN_ALEX':
+        elif 'CNN_ALEX' in settings.method:
             model = AlexNet_like_convnet((training_size[1], training_size[2], training_size[3]), adam)
         nb_params = model.count_params()
 
