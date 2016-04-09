@@ -1,20 +1,14 @@
-import ConfigParser
 import os, sys, glob
-import random
 import numpy as np
-import time
-from method_cnn import train_cnn, test_cnn
-import pandas as pd
-import casiaDB_handler as casia
-import myfilelib as MY
-from auccreator import getAUC
+import ntpath
 from deep_tester import Settings, readtestfile
 from method_cnn import read_model_from_disk
 from scipy.ndimage import imread
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+from tqdm import tqdm
+from myfilelib import fileparts
 
-def test_myimage(img, model, batch_size=1, img_b=None, mask=None, patch_size=40, stride=20, beta=1):
+def test_myimage(img, model, batch_size=1, img_b=None, mask=None, patch_size=40, stride=20, beta=1, namefile=None):
     (rows, cols, channels) = img.shape
     bias_rows = int(round((rows % patch_size) / 2))
     bias_cols = int(round((cols % patch_size) / 2))
@@ -75,8 +69,10 @@ def test_myimage(img, model, batch_size=1, img_b=None, mask=None, patch_size=40,
     imgplot = plt.imshow(out_true_mask, cmap='Greys')
     a.set_title('Expected Mask')
     plt.axis('off')
-    plt.show()
-
+    if namefile == None:
+        plt.show()
+    else:
+        plt.savefig(namefile)
 
 
 
@@ -115,13 +111,14 @@ def main():
                                                                                  settings.method,
                                                                                  settings.use_borders))
     for t in range(nb_tests):
-
         test_images = readtestfile(os.path.join(settings.working_folder, test_filelist[t]), settings)
         model = read_model_from_disk(modelfileweights, modelfilename)
-        for i in test_images:
+        for i in tqdm(test_images):
             img = imread(i.image_path, mode='RGB')
             mask = imread(i.mask_image, flatten=True)
-            test_myimage(img, model, mask=mask)
+            dir, filename, ext= fileparts(ntpath.basename(i.image_path))
+            filename = os.path.join(results_dir, filename + '_result.png')
+            test_myimage(img, model, mask=mask, namefile=filename)
 
 ########### END ################
 
