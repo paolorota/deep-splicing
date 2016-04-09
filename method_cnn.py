@@ -14,7 +14,7 @@ import h5py
 import matplotlib.pyplot as pl
 from random import shuffle
 from keras.utils.io_utils import HDF5Matrix
-from casiaDB_handler import border_patch_sampling, random_patch_sampling
+from casiaDB_handler import patch_sampling, random_patch_sampling
 
 
 def VGG_like_convnet_graph(data_shape, opt):
@@ -163,9 +163,8 @@ def train_cnn(training_h5, test_h5, settings):
         # Train model
         t3 = time.time()
 
-        model.fit(train_x, train_y, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data=(test_x, test_y), shuffle='batch', show_accuracy=True)
+        history = model.fit(train_x, train_y, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data=(test_x, test_y), shuffle='batch', show_accuracy=True)
         # model.fit({'data_in':train_x, 'class_out':train_y}, batch_size=settings.batch_size, nb_epoch=settings.nb_epochs, validation_data={'data_in':test_x, 'class_out':test_y})
-
         # Save the model
         t4 = time.time()
         json_string = model.to_json()
@@ -177,26 +176,53 @@ def train_cnn(training_h5, test_h5, settings):
     return model
 
 
-def test_cnn(test_images, model, batch_size=256, useBorders = 0):
+def test_cnn(test_images, model, batch_size=256, useBorders = 0, doLocalization=False):
     ###### Test model #####
-    tinit = time.time()
     results = np.zeros((len(test_images), 1))
     results_probabilities = np.zeros((len(test_images), 2))
+    patch_results = []
 
     for i in range(len(test_images)):
+        print('Testing on patches image {}/{}'.format(i, len(test_images)))
         img = imread(test_images[i].image_path, mode='RGB')
         # img = cv2.imread(test_images[i].image_path, flags=cv2.IMREAD_COLOR)
+        if doLocalization:
+            m_img = imread(test_images[i].mask_image, flatten=True)
+        else:
+            m_img = None
         if useBorders:
             img_b = imread(test_images[i].border_image, flatten=True)
-            test_x = border_patch_sampling(img, patch_size=40, stride=20, b_image=img_b, b_thr=1)
+            test_auth, test_tamp = patch_sampling(img, patch_size=40, stride=20, b_image=img_b, b_thr=1, m_image=m_img)
+            #concatenation
+            test_x = np.concatenate((test_auth, test_tamp))
+            nb_auth = len(test_auth)
+            nb_tamp = len(test_tamp)
             if len(test_x) == 0:
                 test_x = random_patch_sampling(img, patch_size=40, stride=20, howmany=11)
         else:
-            test_x = border_patch_sampling(img, patch_size=40, stride=20)
+            test_auth, test_tamp = patch_sampling(img, patch_size=40, stride=20, m_image=m_img)
+            test_x = np.concatenate((test_auth, test_tamp))
+            nb_auth = len(test_auth)
+            nb_tamp = len(test_tamp)
 
         # Normalization
         test_x = test_x / 255
-        prediction_probabilities = model.predict_proba(test_x, batch_size=32, verbose=1)
+
+        if doLocalization:
+            print('test.shape = {}'.format(test_x.shape))
+            if len(test_x)==0:
+                print('Sample skipped (no mask found)')
+                continue
+            classes = model.predict_classes(test_x, batch_size=batch_size, verbose=0)
+            labels = np.zeros((len(test_x),), dtype=np.float32)
+            labels[nb_auth:] = 1
+            tmp_res = np.zeros((len(labels), 2), dtype=int)
+            tmp_res[:, 0] = labels
+            tmp_res[:, 1] = classes
+            patch_results.append(tmp_res)
+            print('tmp_res.shape: {}'.format(tmp_res.shape))
+
+        prediction_probabilities = model.predict_proba(test_x, batch_size=batch_size, verbose=0)
         prediction_probabilities = prediction_probabilities.mean(0)
         if prediction_probabilities[0] > prediction_probabilities[1]:
             pred = 0
@@ -215,6 +241,7 @@ def test_cnn(test_images, model, batch_size=256, useBorders = 0):
         results[i, 0] = pred
         results_probabilities[i, :] = prediction_probabilities
 
-    tend = time.time()
-
-    return results, results_probabilities
+    if doLocalization:
+        return patch_results, None
+    else:
+        return results, results_probabilities

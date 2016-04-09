@@ -27,6 +27,7 @@ class Settings:
         self.patch_size = int(Config.get('Test', 'patch_size'))
         self.patch_stride = int(Config.get('Test', 'patch_stride'))
         self.use_borders = bool(int(Config.get('Test', 'use_borders')))
+        self.tampering_localization = bool(int(Config.get('Test', 'tampering_localization')))
         self.nb_epochs = int(Config.get('NN', 'nb_epochs'))
         self.batch_size = int(Config.get('NN', 'batch_size'))
 
@@ -90,7 +91,8 @@ def extractStats(confmat, auc):
     resstring.append('Precision: {}\n'.format(precision))
     resstring.append('Recall: {}\n'.format(recall))
     resstring.append('F-score: {}\n'.format(fscore))
-    resstring.append('AUC: {}\n'.format(auc))
+    if auc != 0:
+        resstring.append('AUC: {}\n'.format(auc))
     return resstring
 
 
@@ -136,7 +138,9 @@ def main():
                                                                       patch_size=settings.patch_size,
                                                                       patch_stride=settings.patch_stride,
                                                                       working_dir=settings.working_folder,
-                                                                      useBorders=settings.use_borders)
+                                                                      useBorders=settings.use_borders,
+                                                                      doLocalization=settings.tampering_localization)
+
         tinit = time.time()
         # train
         if 'CNN' in settings.method:
@@ -144,7 +148,7 @@ def main():
             model = train_cnn(tmp_filename_train, tmp_filename_test, settings)
             ttrain = time.time()
             nb_params = model.count_params()
-            results, probabilities = test_cnn(test_images, model)
+            results, probabilities = test_cnn(test_images, model, batch_size=32, doLocalization=settings.tampering_localization)
         else:
             # try dummy
             print('Dummy method')
@@ -152,20 +156,29 @@ def main():
             results = dummymethod(training_images, test_images)
         tend = time.time()
 
-        # calc confusion matrix
-        labels = np.zeros(results.shape)
-        confmat = np.zeros((2,2))
-        for i in range(len(test_images)):
-            label = test_images[i].label
-            labels[i, 0] = label
-            prediction = int(results[i,0])
-            confmat[label, prediction] += 1
+        confmat = np.zeros((2, 2))
+        if settings.tampering_localization:
+            auc_list.append(0)
+            for i in range(len(results)):
+                r_tmp = results[i]
+                for j in range(len(r_tmp)):
+                    label = r_tmp[j, 0]
+                    prediction = r_tmp[j, 1]
+                    confmat[label, prediction] += 1
+        else:
+            # calc confusion matrix
+            labels = np.zeros(results.shape)
+            for i in range(len(test_images)):
+                label = test_images[i].label
+                labels[i, 0] = label
+                prediction = int(results[i,0])
+                confmat[label, prediction] += 1
+            path_auc = os.path.join(results_dir, 'ROC_m{}_b{}_t{}.pdf'.format(settings.method, settings.use_borders, t))
+            print('Saving auc image: {}'.format(path_auc))
+            a, fpr, tpr = getAUC(labels, probabilities[:, 1], saveas=path_auc)
+            auc_list.append(a)
+        # save the cumulative confmat
         cumulative_confmat += confmat
-        path_auc = os.path.join(results_dir, 'ROC_m{}_b{}_t{}.pdf'.format(settings.method, settings.use_borders, t))
-        print('Saving auc image: {}'.format(path_auc))
-        a, fpr, tpr = getAUC(labels, probabilities[:, 1], saveas=path_auc)
-        auc_list.append(a)
-
 
     # Exproting results on file
     # get stats
@@ -184,6 +197,7 @@ def main():
         s = []
         s.append('RESULTS for Deep Forensics Splicing detection in images\n')
         s.append('Method: {}\n'.format(settings.method))
+        s.append('Localization: {}'.format(settings.tampering_localization))
         s.append('Patch size: {}\n'.format(settings.patch_size))
         s.append('Patch minimum stride: {}\n'.format(settings.patch_stride))
         s.append('Extract patches from borders: {}\n'.format(settings.use_borders))
@@ -194,9 +208,9 @@ def main():
             s.append('Model architecture: {}\n'.format('model{2}_ep{0:02d}_bs{1:02d}.json'.format(settings.nb_epochs, settings.batch_size, settings.method)))
         f.writelines(s)
         f.writelines(statlist)
-        f.write('\n#### RESULTS on single IMAGES####\n')
-        json_string = pd.DataFrame({"ImageId": test_images, "Label": results.tolist()}).to_json()
-        f.write(json_string)
+        # f.write('\n#### RESULTS on single IMAGES####\n')
+        # json_string = pd.DataFrame({"ImageId": test_images, "Label": results.tolist()}).to_json()
+        # f.write(json_string)
 
     # Timing
     print('Time get training samples: {}'.format(MY.hms_string(ttrain - tinit)))

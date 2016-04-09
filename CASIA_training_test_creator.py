@@ -57,6 +57,9 @@ def main():
     else:
         settingsFileName = 'config.ini'
     settings = Settings(settingsFileName)
+    sameFolder = False
+    if settings.tampered_folder == settings.authentic_folder:
+        sameFolder = True
 
     # create workplace if not available
     if not(os.path.isdir(settings.working_folder)):
@@ -74,16 +77,19 @@ def main():
     # n_au = 40
     sys.stdout.flush()
     # authentic list
-    print('Collecting authentic images.')
-    au_str_list = []
-    au_borderList = []
-    for i in tqdm(range(n_au)):
-        borderName, thr = getBorderFile(au_filelist[i], settings.borders_authentic_folder)
-        au_borderList.append(borderName)
-        au_str_list.append('{},{},{},{}'.format(au_filelist[i],
-                                                0,
-                                                borderName,
-                                                'none'))
+    if not sameFolder:
+        print('Collecting authentic images.')
+        au_str_list = []
+        au_borderList = []
+        for i in tqdm(range(n_au)):
+            borderName, thr = getBorderFile(au_filelist[i], settings.borders_authentic_folder)
+            au_borderList.append(borderName)
+            au_str_list.append('{},{},{},{}'.format(au_filelist[i],
+                                                    0,
+                                                    borderName,
+                                                    'none'))
+    else:
+        print('Authentic and Tampered are the same folder. Using Tampered only.')
 
     # tampered list
     print('Collecting tampered images.')
@@ -108,21 +114,26 @@ def main():
     # for each test file
     for tset in range(settings.kfold):
         print('Creating testset {}'.format(tset))
-        shuffle(au_str_list)
         shuffle(tp_str_list)
-        au_test = au_str_list[0:n_per_class]
         tp_test = tp_str_list[0:n_per_class]
-        au_training = au_str_list[n_per_class:]
         tp_training = tp_str_list[n_per_class:]
-        test = au_test + tp_test
-        training = au_training + tp_training
+
+        if not sameFolder:
+            shuffle(au_str_list)
+            au_test = au_str_list[0:n_per_class]
+            au_training = au_str_list[n_per_class:]
+            test = au_test + tp_test
+            training = au_training + tp_training
+        else:
+            test = tp_test
+            training = tp_training
+
         shuffle(test)
         shuffle(training)
         trainingfileout = os.path.join(settings.working_folder, 'training_t{}.txt'.format(tset+1))
         testfileout = os.path.join(settings.working_folder, 'test_t{}.txt'.format(tset+1))
         printFileList(trainingfileout, training)
         printFileList(testfileout, test)
-
 
 
 if __name__ == '__main__':
