@@ -49,30 +49,35 @@ def test_myimage(img, model, batch_size=1, img_b=None, mask=None, patch_size=40,
 
     #PRINT THEM ALL
     fig = plt.figure()
-    a=fig.add_subplot(2, 3,1)
+    a = fig.add_subplot(2, 3, 1)
+    imgplot = plt.imshow(img)
+    a.set_title('Original')
+    plt.axis('off')
+    a=fig.add_subplot(2, 3, 2)
     imgplot = plt.imshow(out_true)
     a.set_title('True')
     plt.axis('off')
-    a = fig.add_subplot(2, 3, 2)
+    a = fig.add_subplot(2, 3, 3)
     imgplot = plt.imshow(out_image)
     a.set_title('Predicted')
     plt.axis('off')
-    a = fig.add_subplot(2, 3, 3)
+    a = fig.add_subplot(2, 3, 4)
     imgplot = plt.imshow(mask, cmap='Greys')
     a.set_title('Mask')
-    plt.axis('off')
-    a = fig.add_subplot(2, 3, 4)
-    imgplot = plt.imshow(out_pred_mask, cmap='Greys')
-    a.set_title('Pred Mask')
     plt.axis('off')
     a = fig.add_subplot(2, 3, 5)
     imgplot = plt.imshow(out_true_mask, cmap='Greys')
     a.set_title('Expected Mask')
     plt.axis('off')
+    a = fig.add_subplot(2, 3, 6)
+    imgplot = plt.imshow(out_pred_mask, cmap='Greys')
+    a.set_title('Pred Mask')
+    plt.axis('off')
     if namefile == None:
         plt.show()
     else:
         plt.savefig(namefile)
+    plt.close()
 
 
 
