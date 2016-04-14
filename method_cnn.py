@@ -11,10 +11,10 @@ from tqdm import tqdm
 import time
 import os
 import h5py
-import matplotlib.pyplot as pl
 from random import shuffle
 from keras.utils.io_utils import HDF5Matrix
 from casiaDB_handler import patch_sampling, random_patch_sampling
+from keras.utils.visualize_util import plot as kerpl
 
 
 def VGG_like_convnet_graph(data_shape, opt):
@@ -76,6 +76,46 @@ def VGG_like_convnet(data_shape, opt):
     model.add(Activation('softmax'))
 
     print ('VGG_like_convnet... nb params: {}'.format(model.count_params()))
+    model.compile(loss='categorical_crossentropy', optimizer=opt)
+    return model
+
+
+def fully_convnet(data_shape, opt):
+    print('Training VGG net.')
+    model = Sequential()
+    # input: 100x100 images with 3 channels -> (3, 100, 100) tensors.
+    # this applies 32 convolution filters of size 3x3 each.
+    model.add(Convolution2D(32, 3, 3, border_mode='valid', input_shape=(data_shape[0], data_shape[1], data_shape[2])))
+    model.add(Activation('relu'))
+    model.add(Convolution2D(32, 3, 3))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
+
+    model.add(Convolution2D(64, 3, 3, border_mode='valid'))
+    model.add(Activation('relu'))
+    model.add(Convolution2D(64, 3, 3))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
+
+    model.add(Convolution2D(128, 3, 3, border_mode='valid'))
+    model.add(Activation('relu'))
+    model.add(Convolution2D(128, 3, 3))
+    model.add(Activation('relu'))
+    #model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
+
+    model.add(Flatten())
+    # Note: Keras does automatic shape inference.
+    model.add(Dense(64))
+    model.add(Activation('relu'))
+    model.add(Dropout(0.5))
+
+    model.add(Dense(2))
+    model.add(Activation('softmax'))
+
+    print ('Almost Fully Convnet... nb params: {}'.format(model.count_params()))
     model.compile(loss='categorical_crossentropy', optimizer=opt)
     return model
 
@@ -150,6 +190,8 @@ def train_cnn(training_h5, test_h5, settings):
         adam = Adam()
         if 'CNN_VGG' in settings.method:
             model = VGG_like_convnet((training_size[1], training_size[2], training_size[3]), adam)
+        elif 'CNN_FULLY' in settings.method:
+            model = fully_convnet((training_size[1], training_size[2], training_size[3]), adam)
         elif 'CNN_ALEX' in settings.method:
             model = AlexNet_like_convnet((training_size[1], training_size[2], training_size[3]), adam)
         nb_params = model.count_params()
@@ -173,6 +215,9 @@ def train_cnn(training_h5, test_h5, settings):
     else:
         print('Read model from file.')
         model = read_model_from_disk(modelfileweights, modelfilename)
+    model_filename = os.path.join(settings.working_folder, 'model.png')
+    print('Printing model graph: {}'.format(model_filename))
+    kerpl(model, to_file=model_filename)
     return model
 
 

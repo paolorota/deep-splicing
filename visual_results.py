@@ -51,7 +51,7 @@ def test_myimage(img, model, batch_size=1, img_b=None, mask=None, patch_size=40,
     fig = plt.figure()
     a = fig.add_subplot(2, 3, 1)
     imgplot = plt.imshow(img)
-    a.set_title('Original')
+    a.set_title('Tampered Image')
     plt.axis('off')
     a=fig.add_subplot(2, 3, 2)
     imgplot = plt.imshow(out_true)
