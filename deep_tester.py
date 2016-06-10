@@ -1,4 +1,4 @@
-import ConfigParser
+import configparser
 import os, sys, glob
 import random
 import numpy as np
@@ -6,14 +6,14 @@ import time
 from method_cnn import train_cnn, test_cnn
 import pandas as pd
 import casiaDB_handler as casia
-import myfilelib as MY
+import pyprutils as MY
 from auccreator import getAUC
 
 
 class Settings:
     def __init__(self, filename):
         print('Reading params form ' + filename)
-        Config = ConfigParser.ConfigParser()
+        Config = configparser.ConfigParser()
         Config.read(filename)
         self.tampered_folder = Config.get('Dataset', 'DB_folder_tp')
         self.authentic_folder = Config.get('Dataset', 'DB_folder_au')
@@ -132,14 +132,26 @@ def main():
             print('Extracting patches from borders.')
             prename = 'tmp_borders'
 
-        tmp_filename_train, tmp_filename_test = casia.create_database(training_images,
-                                                                      test_images,
-                                                                      prename=prename,
-                                                                      patch_size=settings.patch_size,
-                                                                      patch_stride=settings.patch_stride,
-                                                                      working_dir=settings.working_folder,
-                                                                      useBorders=settings.use_borders,
-                                                                      doLocalization=settings.tampering_localization)
+        # TODO: make this structural after submission (this random picks the patches from the image, to be set when the image is too big to take all of them)
+        doRandom = False
+        if doRandom:
+            tmp_filename_train, tmp_filename_test = casia.create_database(training_images,
+                                                                          test_images,
+                                                                          prename=prename,
+                                                                          patch_size=settings.patch_size,
+                                                                          patch_stride=settings.patch_stride,
+                                                                          working_dir=settings.working_folder,
+                                                                          doRandom=doRandom,
+                                                                          howmany=150)
+        else:
+            tmp_filename_train, tmp_filename_test = casia.create_database(training_images,
+                                                                          test_images,
+                                                                          prename=prename,
+                                                                          patch_size=settings.patch_size,
+                                                                          patch_stride=settings.patch_stride,
+                                                                          working_dir=settings.working_folder,
+                                                                          useBorders=settings.use_borders,
+                                                                          doLocalization=settings.tampering_localization)
 
         tinit = time.time()
         # train
@@ -148,7 +160,7 @@ def main():
             model = train_cnn(tmp_filename_train, tmp_filename_test, settings)
             ttrain = time.time()
             nb_params = model.count_params()
-            results, probabilities = test_cnn(test_images, model, batch_size=32, doLocalization=settings.tampering_localization)
+            results, probabilities = test_cnn(test_images, model, batch_size=32, doLocalization=settings.tampering_localization, doRandom=doRandom)
         else:
             # try dummy
             print('Dummy method')

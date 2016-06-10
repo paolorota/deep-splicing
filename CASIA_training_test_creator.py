@@ -1,17 +1,16 @@
 import time
 import os, sys
 import glob
-import ConfigParser
-import myfilelib as my
+import configparser
+import pyprutils as my
 from tqdm import tqdm
-import numpy as np
 from random import shuffle
 
 
 class Settings:
     def __init__(self, filename):
         print('Reading params form ' + filename)
-        Config = ConfigParser.ConfigParser()
+        Config = configparser.ConfigParser()
         Config.read(filename)
         self.tampered_folder = Config.get('Dataset', 'DB_folder_tp')
         self.authentic_folder = Config.get('Dataset', 'DB_folder_au')

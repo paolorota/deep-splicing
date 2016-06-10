@@ -95,7 +95,7 @@ def border_patch_sampling(image, patch_size=40, stride=20, b_image=None, b_thr=1
     return parray
 
 
-def random_patch_sampling(image, patch_size=40, stride=20, howmany=10):
+def random_patch_sampling(image, patch_size=40, stride=20, howmany=10, isTampered=False):
     (rows, cols, channels) = image.shape
     bias_rows = int(round((rows % patch_size) / 2))
     bias_cols = int(round((cols % patch_size) / 2))
@@ -115,10 +115,17 @@ def random_patch_sampling(image, patch_size=40, stride=20, howmany=10):
         img = patch_list[i]
         new_img = np.rollaxis(img, 2, 0)
         parray[i, :, :, :] = new_img
-    return parray
+    if isTampered:
+        larray = np.ones((len(parray), 1), dtype=np.float32)
+    else:
+        larray = np.zeros((len(parray), 1), dtype=np.float32)
+    return parray, larray
 
-
-def get_patch_array(myimages, description, p_size, p_stride, doBorderSearch=1, doLocalization=False, doBalance=False):
+# mode 0 for exhaustive, 1 for border and 2 for random
+def get_patch_array(myimages, description, p_size, p_stride, mode=0, doLocalization=False, doBalance=False, howmany=50):
+    # check preventivo
+    if doLocalization and mode == 2:
+        raise('Cannot do localization with random patch sampling')
     x_tmp = []
     y_tmp = []
     nb_auth_patches = 0
@@ -130,10 +137,19 @@ def get_patch_array(myimages, description, p_size, p_stride, doBorderSearch=1, d
             m_img = imread(myimages[i].mask_image, flatten=True)
         else:
             m_img = None
-        if doBorderSearch:
+        if mode == 1:
             img_b = imread(myimages[i].border_image, flatten=True)
             auth_plist, tamp_plist = patch_sampling(img, patch_size=p_size, stride=p_stride, b_image=img_b, m_image=m_img, beta=1)
             #tmp_plist = border_patch_sampling(img, patch_size=p_size, stride=p_stride, b_image=img_b)
+        elif mode == 2:
+            tmp_plist, tmp_labels =random_patch_sampling(img, patch_size=p_size, stride=p_stride, howmany=howmany, isTampered=bool(myimages[i].label))
+            if myimages[i].label == 0:
+                nb_auth_patches += howmany
+            else:
+                nb_tamp_patches += howmany
+            x_tmp.append(tmp_plist)
+            y_tmp.append(tmp_labels)
+            continue
         else:
             auth_plist, tamp_plist = patch_sampling(img, patch_size=p_size, stride=p_stride, m_image=m_img, beta=1)
             #tmp_plist = border_patch_sampling(img, patch_size=p_size, stride=p_stride)
@@ -166,14 +182,14 @@ def get_patch_array(myimages, description, p_size, p_stride, doBorderSearch=1, d
         x_arr[c:c+pack_size, :, :, :] = single_image_patches
         y_arr[c:c+pack_size, :] = single_image_targets
         c += pack_size
-    print('DEBUG: size of x_arr/y_arr here 1: {}/{}'.format(x_arr.shape, y_arr.shape))
+    # print('DEBUG: size of x_arr/y_arr here 1: {}/{}'.format(x_arr.shape, y_arr.shape))
     if doLocalization and doBalance:
         # need to balance the training set
         print('Balancing the Training set.')
         ref = nb_auth_patches
         if nb_auth_patches > nb_tamp_patches:
             ref = nb_tamp_patches
-        print('DEBUG: ref: {}; auth: {}; tamp: {}\nShuffling'.format(ref, nb_auth_patches, nb_tamp_patches))
+        # print('DEBUG: ref: {}; auth: {}; tamp: {}\nShuffling'.format(ref, nb_auth_patches, nb_tamp_patches))
         idxA = np.argwhere(y_arr[:, 0] == 0)
         idxT = np.argwhere(y_arr[:, 0] == 1)
         order = range(nb_auth_patches)
@@ -184,23 +200,30 @@ def get_patch_array(myimages, description, p_size, p_stride, doBorderSearch=1, d
         shuffle(order)
         order = order[0:ref]
         idxT = idxT[order, 0]
-        print('DEBUG: A = {}; T = {}'.format(idxA.shape, idxT.shape))
+        # print('DEBUG: A = {}; T = {}'.format(idxA.shape, idxT.shape))
         idxALL = np.concatenate((idxA, idxT))
         x_arr = x_arr[idxALL, :, :, :]
         y_arr = y_arr[idxALL, :]
-        print('DEBUG: nb auth = {}; nb tamp = {}'.format(len(np.argwhere(y_arr == 0)), len(np.argwhere(y_arr == 1))))
-        print('DEBUG: size of x_arr here 2: {}'.format(x_arr.shape))
+        # print('DEBUG: nb auth = {}; nb tamp = {}'.format(len(np.argwhere(y_arr == 0)), len(np.argwhere(y_arr == 1))))
+        # print('DEBUG: size of x_arr here 2: {}'.format(x_arr.shape))
     return x_arr, y_arr
 
 ## Creates the h5 dataset for training and test (test might be used for validation only since it is patch based)
-def create_database(training_images, test_images, prename='tmp', patch_size=40, patch_stride=20, working_dir='.', useBorders=False, doLocalization=False):
+def create_database(training_images, test_images, prename='tmp', patch_size=40, patch_stride=20, working_dir='.', useBorders=False, doLocalization=False, doRandom=False, howmany=50):
     # Creating model
     tmp_filename_train = '{}_training_p{}_s{}.h5'.format(prename, patch_size, patch_stride)
     tmp_filename_train = os.path.join(working_dir, tmp_filename_train)
     if not(os.path.exists(tmp_filename_train)):
         print('{} not found! Need to fetch data.'.format(tmp_filename_train))
-        train_x, train_y = get_patch_array(training_images, 'Creation of training set', patch_size,
-                                           patch_stride, doBorderSearch=useBorders, doLocalization=doLocalization, doBalance=True)
+        if doRandom:
+            train_x, train_y = get_patch_array(training_images, 'Creation of training set', patch_size,
+                                               patch_stride, mode=2, doLocalization=doLocalization, doBalance=True, howmany=50)
+        elif useBorders:
+            train_x, train_y = get_patch_array(training_images, 'Creation of training set', patch_size,
+                                               patch_stride, mode=1, doLocalization=doLocalization, doBalance=True)
+        else:
+            train_x, train_y = get_patch_array(training_images, 'Creation of training set', patch_size,
+                                               patch_stride, mode=0, doLocalization=doLocalization, doBalance=True)
         print('Normalization of the training set.')
         train_x = train_x / 255
         print('Shuffling data')
@@ -223,9 +246,17 @@ def create_database(training_images, test_images, prename='tmp', patch_size=40, 
     tmp_filename_test = os.path.join(working_dir, tmp_filename_test)
     if not(os.path.exists(tmp_filename_test)):
         print('{} not found! Need to fetch data.'.format(tmp_filename_test))
-        test_x, test_y = get_patch_array(test_images, 'Creation of test set', patch_size,
-                                         patch_stride,
-                                         doBorderSearch=useBorders, doLocalization=doLocalization, doBalance=True)  # Non necessario se non per validation
+        if doRandom:
+            test_x, test_y = get_patch_array(training_images, 'Creation of test set', patch_size,
+                                               patch_stride, mode=2, doLocalization=doLocalization, doBalance=True,
+                                               howmany=50)
+        elif useBorders:
+            test_x, test_y= get_patch_array(training_images, 'Creation of test set', patch_size,
+                                               patch_stride, mode=1, doLocalization=doLocalization, doBalance=True)
+        else:
+            test_x, test_y = get_patch_array(training_images, 'Creation of test set', patch_size,
+                                               patch_stride, mode=0, doLocalization=doLocalization, doBalance=True) # Non necessario se non per validation
+
         print('Normalization of the test set.')
         test_x = test_x / 255
         # labels to categorical
@@ -238,3 +269,4 @@ def create_database(training_images, test_images, prename='tmp', patch_size=40, 
     else:
         print('Loading DB test: {}'.format(tmp_filename_test))
     return tmp_filename_train, tmp_filename_test
+

@@ -14,7 +14,6 @@ import h5py
 from random import shuffle
 from keras.utils.io_utils import HDF5Matrix
 from casiaDB_handler import patch_sampling, random_patch_sampling
-from keras.utils.visualize_util import plot as kerpl
 
 
 def VGG_like_convnet_graph(data_shape, opt):
@@ -57,14 +56,14 @@ def VGG_like_convnet(data_shape, opt):
     model.add(Convolution2D(32, 3, 3))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=(2, 2)))
-    model.add(Dropout(0.25))
+    #model.add(Dropout(0.25))
 
     model.add(Convolution2D(64, 3, 3, border_mode='valid'))
     model.add(Activation('relu'))
     model.add(Convolution2D(64, 3, 3))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=(2, 2)))
-    model.add(Dropout(0.25))
+    #model.add(Dropout(0.25))
 
     model.add(Flatten())
     # Note: Keras does automatic shape inference.
@@ -217,11 +216,11 @@ def train_cnn(training_h5, test_h5, settings):
         model = read_model_from_disk(modelfileweights, modelfilename)
     model_filename = os.path.join(settings.working_folder, 'model.png')
     print('Printing model graph: {}'.format(model_filename))
-    kerpl(model, to_file=model_filename)
+    #kerpl(model, to_file=model_filename)
     return model
 
 
-def test_cnn(test_images, model, batch_size=256, useBorders = 0, doLocalization=False):
+def test_cnn(test_images, model, batch_size=256, patch_size=40, patch_stride=20, useBorders = 0, doLocalization=False, doRandom=False, howmany=150):
     ###### Test model #####
     results = np.zeros((len(test_images), 1))
     results_probabilities = np.zeros((len(test_images), 2))
@@ -231,24 +230,27 @@ def test_cnn(test_images, model, batch_size=256, useBorders = 0, doLocalization=
         print('Testing on patches image {}/{}'.format(i, len(test_images)))
         img = imread(test_images[i].image_path, mode='RGB')
         # img = cv2.imread(test_images[i].image_path, flags=cv2.IMREAD_COLOR)
-        if doLocalization:
-            m_img = imread(test_images[i].mask_image, flatten=True)
+        if doRandom:
+            test_x, tmp_useless = random_patch_sampling(img, patch_size=patch_size, stride=patch_stride, howmany=howmany)
         else:
-            m_img = None
-        if useBorders:
-            img_b = imread(test_images[i].border_image, flatten=True)
-            test_auth, test_tamp = patch_sampling(img, patch_size=40, stride=20, b_image=img_b, b_thr=1, m_image=m_img)
-            #concatenation
-            test_x = np.concatenate((test_auth, test_tamp))
-            nb_auth = len(test_auth)
-            nb_tamp = len(test_tamp)
-            if len(test_x) == 0:
-                test_x = random_patch_sampling(img, patch_size=40, stride=20, howmany=11)
-        else:
-            test_auth, test_tamp = patch_sampling(img, patch_size=40, stride=20, m_image=m_img)
-            test_x = np.concatenate((test_auth, test_tamp))
-            nb_auth = len(test_auth)
-            nb_tamp = len(test_tamp)
+            if doLocalization:
+                m_img = imread(test_images[i].mask_image, flatten=True)
+            else:
+                m_img = None
+            if useBorders:
+                img_b = imread(test_images[i].border_image, flatten=True)
+                test_auth, test_tamp = patch_sampling(img, patch_size=patch_size, stride=patch_stride, b_image=img_b, b_thr=1, m_image=m_img)
+                #concatenation
+                test_x = np.concatenate((test_auth, test_tamp))
+                nb_auth = len(test_auth)
+                nb_tamp = len(test_tamp)
+                if len(test_x) == 0:
+                    test_x, tmp_useless = random_patch_sampling(img, patch_size=patch_size, stride=patch_stride, howmany=50)
+            else:
+                test_auth, test_tamp = patch_sampling(img, patch_size=patch_size, stride=patch_stride, m_image=m_img)
+                test_x = np.concatenate((test_auth, test_tamp))
+                nb_auth = len(test_auth)
+                nb_tamp = len(test_tamp)
 
         # Normalization
         test_x = test_x / 255
