@@ -63,3 +63,6 @@ target/
 
 # pycharm settings
 .idea/
+
+#3rd Party directory we don't want to upload for now
+3rdParty/
