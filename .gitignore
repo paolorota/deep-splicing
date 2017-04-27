@@ -66,3 +66,6 @@ target/
 
 #3rd Party directory we don't want to upload for now
 3rdParty/
+
+#dummy data dir
+data/

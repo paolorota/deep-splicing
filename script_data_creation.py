@@ -1,12 +1,14 @@
 import os
-import numpy as np
 import configparser
 import glob
 from scipy import misc
-import random as rand
-from matplotlib import pyplot as plt
+import numpy as np
 import cv2
-import tensorflow as tf
+import random as rand
+from time import time
+import datetime
+
+import h5py
 
 
 class Settings:
@@ -18,8 +20,6 @@ class Settings:
         self.folder_authentic = config.get('General', 'folder_au')
         self.folder_mask = config.get('General', 'folder_mask')
         self.logdir = config.get('General', 'logdir')
-
-        self.datapath = config.get('Train', 'data_file_path')
 
     def __str__(self):
         return 'tp: {}\nau: {}\nmask: {}'.format(self.folder_tampered,
@@ -37,7 +37,7 @@ class Settings:
         if len(files_mask) != len(files_tp):
             print('n_tp: {}\nn_au: {}\nn_mask: {}\n'.format(len(files_tp), len(files_au), len(files_mask)))
             raise Exception('Files mismatch between tp and mask')
-        dataset = []
+        dataset = list()
         for i, name in enumerate(files_tp):
             tmp_file = os.path.join(self.folder_tampered, name)
             mask_file = glob.glob1(self.folder_mask, '{}*'.format(name.split('.')[:-1][0]))
@@ -47,49 +47,14 @@ class Settings:
         return dataset
 
 
-class DataHandler:
+class DataReader:
     def __init__(self):
-        self.b_pointer = 0
-        self.epoch = 1
-        self.x = None
-        self.y = None
-
-    def reset_training(self):
-        self.b_pointer = 0
-        self.epoch = 1
-
-    def shuffle_db(self):
-        n_imgs = self.x.shape[0]
-        ord = [i for i in range(n_imgs)]
-        rand.shuffle(ord)
-        self.x = self.x[ord, :, :, :]
-        self.y = self.y[ord, :, :, :]
-
-    def next_batch(self, b_size):
-        b_idx = [self.b_pointer, self.b_pointer + b_size]
-        # check if the batch is finished or returning 0
-        self.b_pointer += b_size
-        batch_imgs = self.x[b_idx[0]:b_idx[1], :, :, :]
-        batch_masks = self.y[b_idx[0]:b_idx[1], :, :, :]
-        if len(batch_imgs) < b_size:
-            self.shuffle_db()
-            self.b_pointer = 0
-            self.epoch += 1
-        return batch_imgs, batch_masks
-
-    def fetch_random_validation_set_from_training(self, b_size):
-        r = rand.randint(0, len(self.x) - b_size)
-        b_idx = [r, r + b_size]
-        batch_imgs = self.x[b_idx[0]:b_idx[1], :, :, :]
-        batch_masks = self.y[b_idx[0]:b_idx[1], :, :, :]
-        return batch_imgs, batch_masks
-
-
-class DataHandler_FromRawData(DataHandler):
-    def __init__(self):
-        DataHandler.__init__()
         self.textual_db = None
         self.image_db = None
+        self.b_pointer = 0
+        self.epoch = 1
+        self.images = None
+        self.masks = None
 
     def read_data(self, db):
         self.textual_db = db
@@ -97,7 +62,11 @@ class DataHandler_FromRawData(DataHandler):
         for i, n in enumerate(db):
             im1 = misc.imread(n[0], mode='RGB')
             im2 = misc.imread(n[1], flatten=True)
+            im3 = cv2.imread(n[0])
+            # b, g, r = cv2.split(im3)
+            # rgb_img = cv2.merge([r, g, b])
             self.image_db.append((im1, im2))
+            # self.n_imgs = len(self.image_db)
 
     def prepare_data_patches(self, iw, ih, pximage=10):
         db_size = len(self.image_db)
@@ -135,56 +104,41 @@ class DataHandler_FromRawData(DataHandler):
                 if myiter % pximage == 0:
                     break
         self.textual_db = im_names
-        self.x = im_tensor
-        self.y = mk_tensor
-
-    def prepare_data_resize(self, iw, ih):
-        db_size = len(self.image_db)
-        im_tensor = np.zeros((db_size, iw, ih, 3), dtype=np.float32)
-        mk_tensor = np.zeros((db_size, iw, ih, 1), dtype=np.float32)
-        for i, n in enumerate(self.image_db):
-            im1 = misc.imresize(n[0], (iw, ih))
-            im2 = misc.imresize(n[1], (iw, ih))
-            im2 = im2 / 255
-            im_tensor[i, :, :, :] = im1[:, :, 0:3]
-            if len(im2.shape) > 2:
-                mk_tensor[i, :, :, 0] = im2[:, :, 0]
-                raise Exception('This condition should never happens')
-            else:
-                mk_tensor[i, :, :, 0] = im2[:, :]
-        self.x = im_tensor
-        self.y = mk_tensor
-
-    def shuffle_db(self):
-        DataHandler.shuffle_db()
-        tmp = [self.textual_db[i] for i in ord]
-        self.textual_db = tmp
-
-    def fetch_and_show(self, i):
-        tmp_img = self.x[i, :, :, :]
-        tmp_mask = self.y[i, :, :, :]
-        plt.subplot(121)
-        plt.imshow(tmp_img)
-        plt.subplot(122)
-        plt.imshow(tmp_mask.reshape((tmp_mask.shape[:-1])), cmap='gray')
-        plt.suptitle(self.textual_db[i][0])
-        plt.show()
+        self.images = im_tensor
+        self.masks = mk_tensor
 
 
-def show_image(img, where=None):
-    print('img_shape: {}'.format(img.shape))
-    import scipy.misc as ms
-    if len(img.shape) == 3:
-        if img.shape[2] == 1:
-            img = img[:, :, 0]
-    plt.imshow(img)
-    plt.xticks([])
-    plt.yticks([])
-    plt.title('Image Plot')
-    plt.show()
-    if where is None:
-        ms.imsave('to_be_deleted_if_found_in_the_hard_disk.jpg', img)
-    else:
-        path = os.path.join(where, 'to_be_deleted_if_found_in_the_hard_disk.jpg')
-        ms.imsave(path, img)
+t0 = time()
+patch_size = 80
+launch_time = datetime.datetime.now()
+fileout_root = '{0:4}{1:2}{2:2}_{3:2}{4:2}{5:2}_p{6}x{6}.h5'.format(launch_time.year,
+                                                                    launch_time.month,
+                                                                    launch_time.day,
+                                                                    launch_time.hour,
+                                                                    launch_time.minute,
+                                                                    launch_time.second,
+                                                                    patch_size).replace(' ', '0')
+dir_out = 'data'
+fileout = os.path.join(dir_out, fileout_root)
+
+
+sets = Settings('config.cfg')
+db_list = sets.check_dataset()
+t1 = time()
+data_reader = DataReader()
+data_reader.read_data(db_list)
+t2 = time()
+data_reader.prepare_data_patches(patch_size, patch_size, pximage=10)
+t3 = time()
+
+with h5py.File(fileout, 'w') as f:
+    f.create_dataset('x', shape=data_reader.images.shape, dtype=np.float32, data=data_reader.images)
+    f.create_dataset('y', shape=data_reader.masks.shape, dtype=np.float32, data=data_reader.masks)
+    f.flush()
+
+print('Time to startup: {}'.format(datetime.timedelta(seconds=t1-t0)))
+print('Time to load dataset: {}'.format(datetime.timedelta(seconds=t2-t1)))
+print('Time to extract patches: {}'.format(datetime.timedelta(seconds=t3-t2)))
+print('Time to save the db: {}'.format(datetime.timedelta(seconds=time()-t3)))
+
 
