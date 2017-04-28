@@ -87,7 +87,7 @@ class DataHandler:
 
 class DataHandler_FromRawData(DataHandler):
     def __init__(self):
-        DataHandler.__init__()
+        DataHandler.__init__(self)
         self.textual_db = None
         self.image_db = None
 
@@ -113,6 +113,7 @@ class DataHandler_FromRawData(DataHandler):
             # for unknown reasons some masks are not of the same size of the images
             if image_shape != mask_shape:
                 mask = misc.imresize(mask, image_shape)
+                mask = mask / 255  # not clear why we need this but we do
                 print('This image does not work {} - Performing resize of the mask'.format(i))
             limitH = (0, image_shape[0] - ih)
             limitW = (0, image_shape[1] - iw)
@@ -156,7 +157,7 @@ class DataHandler_FromRawData(DataHandler):
         self.y = mk_tensor
 
     def shuffle_db(self):
-        DataHandler.shuffle_db()
+        DataHandler.shuffle_db(self)
         tmp = [self.textual_db[i] for i in ord]
         self.textual_db = tmp
 
