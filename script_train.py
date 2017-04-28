@@ -10,6 +10,7 @@ import time
 import layers as L
 import tools as T
 import random as rand
+from tqdm import tqdm
 
 
 class Settings:
@@ -20,13 +21,26 @@ class Settings:
         self.logdir = config.get('General', 'logdir')
         self.datapath = config.get('Train', 'data_file_path')
 
-
 class DataReaderH5(T.DataHandler):
 
     def readH5(self, h5file):
         with h5py.File(h5file, 'r') as f:
             self.x = f['x'].value
             self.y = f['y'].value
+
+    def unfold_targets(self):
+        y_shape_new = list(self.y.shape)
+        y_shape_new[-1] = 2
+        y_new = np.zeros(y_shape_new, dtype=np.float32)
+        for i in tqdm(range(y_shape_new[0]), desc='Image'):
+            for j in range(y_shape_new[1]):
+                for t in range(y_shape_new[2]):
+                    tmp = self.y[i, j, t, 0]
+                    try:
+                        y_new[i, j, t, int(tmp)] = 1
+                    except IndexError:
+                        print('sacramento!')
+
 
 class Main:
     def __init__(self, sets):
@@ -35,7 +49,7 @@ class Main:
         self.n_channels = 3
         self.batch_size = 32
         self.learning_rate = 0.8
-        self.epochs = 5
+        self.epochs = 5000
 
         # net parameters
         self.logits = None
@@ -120,6 +134,7 @@ class Main:
     def main(self):
         data_reader = DataReaderH5()
         data_reader.readH5(self.sets.datapath)
+        # data_reader.unfold_targets()
         print('db_list length: {}'.format(data_reader.x.shape[0]))
 
         # generate the network
@@ -159,7 +174,7 @@ class Main:
                     # run optimization
                     _, cost = sess.run([self.optimizer, self.cost], feed_dict={input_tensor: batch_data,
                                                                                labels_tensor: batch_target})
-                    print('sample {}/{} cost: {}'.format(it, len(data_reader.x), cost))
+                    # print('sample {}/{} cost: {}'.format(it, len(data_reader.x), cost))
 
                 val_loss, summary = sess.run([self.cost, merged_summary_op],
                                              feed_dict={input_tensor: val_img,

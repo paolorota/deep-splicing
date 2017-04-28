@@ -7,6 +7,7 @@ import cv2
 import random as rand
 from time import time
 import datetime
+import tools as T
 
 import h5py
 
@@ -47,67 +48,6 @@ class Settings:
         return dataset
 
 
-class DataReader:
-    def __init__(self):
-        self.textual_db = None
-        self.image_db = None
-        self.b_pointer = 0
-        self.epoch = 1
-        self.images = None
-        self.masks = None
-
-    def read_data(self, db):
-        self.textual_db = db
-        self.image_db = []
-        for i, n in enumerate(db):
-            im1 = misc.imread(n[0], mode='RGB')
-            im2 = misc.imread(n[1], flatten=True)
-            im3 = cv2.imread(n[0])
-            # b, g, r = cv2.split(im3)
-            # rgb_img = cv2.merge([r, g, b])
-            self.image_db.append((im1, im2))
-            # self.n_imgs = len(self.image_db)
-
-    def prepare_data_patches(self, iw, ih, pximage=10):
-        db_size = len(self.image_db)
-        im_tensor = np.zeros((db_size*pximage, iw, ih, 3), dtype=np.float32)
-        mk_tensor = np.zeros((db_size*pximage, iw, ih, 1), dtype=np.float32)
-        im_names = list()
-        myiter = 0
-        for i, n in enumerate(self.image_db):
-            img = n[0] / 255
-            mask = n[1] / 255
-            image_shape = img.shape[0:-1]
-            mask_shape = mask.shape
-            # for unknown reasons some masks are not of the same size of the images
-            if image_shape != mask_shape:
-                mask = misc.imresize(mask, image_shape)
-                print('This image does not work {} - Performing resize of the mask'.format(i))
-            limitH = (0, image_shape[0] - ih)
-            limitW = (0, image_shape[1] - iw)
-            tmp_check = 1
-            while True:
-                h0 = rand.randint(limitH[0], limitH[1])
-                w0 = rand.randint(limitW[0], limitW[1])
-                im1 = img[h0:h0+ih, w0:w0+iw, :]
-                im2 = mask[h0:h0+ih, w0:w0+iw]
-                # condition for having some tampering region into the patch
-                if np.sum(im2) == 0 or np.sum(im2) == iw * ih:
-                    tmp_check += 1
-                    if tmp_check % 200 == 0:
-                        print('tmp_check for image {}/{} = {}'.format(i, len(self.image_db), tmp_check))
-                    continue
-                im_tensor[myiter] = im1
-                mk_tensor[myiter, :, :, 0] = im2
-                im_names.append(self.textual_db[i])
-                myiter += 1
-                if myiter % pximage == 0:
-                    break
-        self.textual_db = im_names
-        self.images = im_tensor
-        self.masks = mk_tensor
-
-
 t0 = time()
 patch_size = 80
 launch_time = datetime.datetime.now()
@@ -125,15 +65,15 @@ fileout = os.path.join(dir_out, fileout_root)
 sets = Settings('config.cfg')
 db_list = sets.check_dataset()
 t1 = time()
-data_reader = DataReader()
+data_reader = T.DataHandler_FromRawData()
 data_reader.read_data(db_list)
 t2 = time()
 data_reader.prepare_data_patches(patch_size, patch_size, pximage=10)
 t3 = time()
 
 with h5py.File(fileout, 'w') as f:
-    f.create_dataset('x', shape=data_reader.images.shape, dtype=np.float32, data=data_reader.images)
-    f.create_dataset('y', shape=data_reader.masks.shape, dtype=np.float32, data=data_reader.masks)
+    f.create_dataset('x', shape=data_reader.x.shape, dtype=np.float32, data=data_reader.x)
+    f.create_dataset('y', shape=data_reader.y.shape, dtype=np.float32, data=data_reader.y)
     f.flush()
 
 print('Time to startup: {}'.format(datetime.timedelta(seconds=t1-t0)))
