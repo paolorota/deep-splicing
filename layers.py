@@ -90,7 +90,7 @@ def flatten(input_tensor):
     return tmp_tensor
 
 
-def linear(input_, output_size, name, stddev=1, bias_start=0.0, with_w=False):
+def linear(input_, output_size, name, stddev=1, bias_start=0.1, with_w=False):
     shape = input_.get_shape().as_list()
 
     with tf.variable_scope(name):
