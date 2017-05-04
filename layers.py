@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow.contrib.layers import xavier_initializer
 import numpy as np
 
-def conv(input_tensor, name, kw, kh, n_out, dw=1, dh=1, activation_fn=tf.nn.relu):
+def conv(input_tensor, name, kw, kh, n_out, dw=1, dh=1, activation_fn=tf.nn.relu, phase=0):
 
     # gets the color depth of the input
     n_in = input_tensor.get_shape()[-1].value
@@ -10,15 +10,17 @@ def conv(input_tensor, name, kw, kh, n_out, dw=1, dh=1, activation_fn=tf.nn.relu
     # open a scope which is good for reusing the weights
     with tf.variable_scope(name):
         weights = tf.get_variable('weights', [kh, kw, n_in, n_out], tf.float32,
-                                  initializer=tf.truncated_normal_initializer())
-        biases = tf.get_variable('bias', [n_out], tf.float32, initializer=tf.constant_initializer())
+                                  initializer=tf.truncated_normal_initializer(mean=0.0, stddev=1.0))
+        biases = tf.get_variable('bias', [n_out], tf.float32, initializer=tf.constant_initializer(0))
 
         # create the convolution
         conv = tf.nn.conv2d(input_tensor, weights, (1, dh, dw, 1), padding='SAME')
 
+        logit = tf.nn.bias_add(conv, biases)
+        logit = tf.contrib.layers.batch_norm(logit, center=True, scale=True, is_training=phase, scope='bn')
         # perform activation
-        activation = activation_fn(tf.nn.bias_add(conv, biases))
-        return activation
+        activation = activation_fn(logit)
+    return activation
 
 
 def pool(input_tensor, name, kh, kw, dh=1, dw=1):
@@ -48,8 +50,8 @@ def deconv(input_tensor, n_out=64, kh=5, kw=5, dh=1, dw=1, name="deconv2d", with
                                         output_shape=output_shape,
                                         strides=[1, dh, dw, 1],
                                         padding='SAME')
-        # biases = tf.get_variable('bias', n_out, initializer=tf.constant_initializer(0.0))
-        # deconv = tf.nn.bias_add(deconv, biases)
+        biases = tf.get_variable('bias', n_out, initializer=tf.constant_initializer(0.0))
+        deconv = tf.nn.bias_add(deconv, biases)
         # reshaping needed to preserve the shape in the net
         deconv = tf.reshape(deconv, shape=output_shape)
         if with_w:
