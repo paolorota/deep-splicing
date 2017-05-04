@@ -64,6 +64,7 @@ class DataHandler:
         rand.shuffle(ord)
         self.x = self.x[ord, :, :, :]
         self.y = self.y[ord, :, :, :]
+        return ord
 
     def next_batch(self, b_size):
         b_idx = [self.b_pointer, self.b_pointer + b_size]
@@ -85,7 +86,7 @@ class DataHandler:
         return batch_imgs, batch_masks
 
 
-class DataHandler_FromRawData(DataHandler):
+class DataHandler_IFS_TC(DataHandler):
     def __init__(self):
         DataHandler.__init__(self)
         self.textual_db = None
@@ -157,7 +158,7 @@ class DataHandler_FromRawData(DataHandler):
         self.y = mk_tensor
 
     def shuffle_db(self):
-        DataHandler.shuffle_db(self)
+        ord = DataHandler.shuffle_db(self)
         tmp = [self.textual_db[i] for i in ord]
         self.textual_db = tmp
 
