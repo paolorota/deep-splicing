@@ -69,3 +69,4 @@ target/
 
 #dummy data dir
 data/
+MNIST_data/

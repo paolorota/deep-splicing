@@ -21,6 +21,7 @@ class Settings:
         self.logdir = config.get('General', 'logdir')
         self.datapath = config.get('Train', 'data_file_path')
 
+
 class DataReaderH5(T.DataHandler):
 
     def readH5(self, h5file):
@@ -59,97 +60,71 @@ class Main:
         self.norm_probe = None
         self.filters = None
 
-    def network_squeeze(self, x, y):
-        print('Input tensor {}'.format(x.get_shape()))
-        print('labels tensor {}'.format(y.get_shape()))
+    def network_squeeze(self, x):
         with tf.name_scope('Encoder_1'):
-            net = L.conv(x, name='conv1_1', kh=3, kw=3, n_out=32)
-            net = L.conv(net, name='conv1_2', kh=3, kw=3, n_out=32)
-            net = L.pool(net, name='pool1', kh=2, kw=2, dw=2, dh=2)
-            print('Encoder1 {}'.format(net.get_shape()))
+            net1 = L.conv(x, name='conv1_1', kh=3, kw=3, n_out=32)
+            net1 = L.conv(net1, name='conv1_2', kh=3, kw=3, n_out=32)
+            net1 = L.pool(net1, name='pool1', kh=2, kw=2, dw=2, dh=2)
+            print('Encoder1 {}'.format(net1.get_shape()))
         with tf.name_scope('Encoder_2'):
-            net = L.conv(net, name='conv2_1', kh=3, kw=3, n_out=64)
-            net = L.conv(net, name='conv2_2', kh=3, kw=3, n_out=64)
-            net = L.pool(net, name='pool2', kh=2, kw=2, dw=2, dh=2)
-            print('Encoder2 {}'.format(net.get_shape()))
+            net2 = L.conv(net1, name='conv2_1', kh=3, kw=3, n_out=64)
+            net2 = L.conv(net2, name='conv2_2', kh=3, kw=3, n_out=64)
+            net2 = L.pool(net2, name='pool2', kh=2, kw=2, dw=2, dh=2)
+            print('Encoder2 {}'.format(net2.get_shape()))
         with tf.name_scope('Decoder_1'):
-            net = L.deconv(net, name='deconv1_1', kh=3, kw=3, n_out=64)
-            net = L.deconv(net, name='deconv1_2', kh=3, kw=3, n_out=64)
-            net = L.upsample(net)
-            print('Decoder1 {}'.format(net.get_shape()))
+            net3 = L.deconv(net2, name='deconv1_1', kh=3, kw=3, n_out=64)
+            net3 = L.deconv(net3, name='deconv1_2', kh=3, kw=3, n_out=64)
+            net3 = L.upsample(net3)
+            print('Decoder1 {}'.format(net3.get_shape()))
         with tf.name_scope('Decoder_2'):
-            net = L.deconv(net, name='deconv2_1', kh=3, kw=3, n_out=32)
-            net = L.deconv(net, name='deconv2_2', kh=3, kw=3, n_out=32)
-            net = L.upsample(net)
-            print('Decoder2 {}'.format(net.get_shape()))
-        with tf.name_scope('Outputs'):
-            net = L.conv(net, name='conv3', kh=5, kw=5, n_out=1)
-            # net = L.flatten(net)
-            print('Logits {}'.format(net.get_shape()))
-            self.logits = tf.nn.sigmoid(net, 'sigm1')
-
-        # compute the loss
-        with tf.name_scope('Cost'):
-            self.cost = tf.sqrt(tf.reduce_mean(tf.square(tf.subtract(self.logits, y))))
-        with tf.name_scope('Optimizer'):
-            self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.cost)
-
-    def network_squeeze_softmax(self, x):
-        with tf.name_scope('Encoder_1'):
-            net = L.conv(x, name='conv1_1', kh=3, kw=3, n_out=32)
-            net = L.conv(net, name='conv1_2', kh=3, kw=3, n_out=32)
-            net = L.pool(net, name='pool1', kh=2, kw=2, dw=2, dh=2)
-            print('Encoder1 {}'.format(net.get_shape()))
-        with tf.name_scope('Encoder_2'):
-            net = L.conv(net, name='conv2_1', kh=3, kw=3, n_out=64)
-            net = L.conv(net, name='conv2_2', kh=3, kw=3, n_out=64)
-            net = L.pool(net, name='pool2', kh=2, kw=2, dw=2, dh=2)
-            print('Encoder2 {}'.format(net.get_shape()))
-        with tf.name_scope('Decoder_1'):
-            net = L.deconv(net, name='deconv1_1', kh=3, kw=3, n_out=64)
-            net = L.deconv(net, name='deconv1_2', kh=3, kw=3, n_out=64)
-            net = L.upsample(net)
-            print('Decoder1 {}'.format(net.get_shape()))
-        with tf.name_scope('Decoder_2'):
-            net = L.deconv(net, name='deconv2_1', kh=3, kw=3, n_out=32)
-            net = L.deconv(net, name='deconv2_2', kh=3, kw=3, n_out=32)
-            net = L.upsample(net)
-            print('Decoder2 {}'.format(net.get_shape()))
+            net4 = L.deconv(net3, name='deconv2_1', kh=3, kw=3, n_out=32)
+            net4 = L.deconv(net4, name='deconv2_2', kh=3, kw=3, n_out=32)
+            net4 = L.upsample(net4)
+            print('Decoder2 {}'.format(net4.get_shape()))
         with tf.name_scope('Output'):
-            out = L.conv(net, 'conv_out', kh=3, kw=3, n_out=2)
+            out = L.conv(net4, 'conv_out', kh=3, kw=3, n_out=1)
+            out = L.flatten(out)
             print('Logit tensor: {}'.format(out.get_shape()))
         return out
 
-    def network_softmax(self, x):
+    def network_squeeze_softmax(self, x):
         with tf.name_scope('Encoder_1'):
             net1 = L.conv(x, name='conv1_1', kh=3, kw=3, n_out=32)
-            net2 = L.conv(x, name='conv1_2', kh=5, kw=5, n_out=32)
-            net3 = L.conv(x, name='conv1_3', kh=9, kw=9, n_out=32)
-        with tf.name_scope('Concat_1'):
-            net4 = tf.concat(3, [net1, net2, net3])
-            print('Net4 tensor: {}'.format(net4.get_shape()))
+            net1 = L.conv(net1, name='conv1_2', kh=3, kw=3, n_out=32)
+            net1 = L.pool(net1, name='pool1', kh=2, kw=2, dw=2, dh=2)
+            print('Encoder1 {}'.format(net.get_shape()))
+        with tf.name_scope('Encoder_2'):
+            net2 = L.conv(net1, name='conv2_1', kh=3, kw=3, n_out=64)
+            net2 = L.conv(net2, name='conv2_2', kh=3, kw=3, n_out=64)
+            net2 = L.pool(net2, name='pool2', kh=2, kw=2, dw=2, dh=2)
+            print('Encoder2 {}'.format(net.get_shape()))
+        with tf.name_scope('Decoder_1'):
+            net3 = L.deconv(net2, name='deconv1_1', kh=3, kw=3, n_out=64)
+            net3 = L.deconv(net3, name='deconv1_2', kh=3, kw=3, n_out=64)
+            net3 = L.upsample(net3)
+            print('Decoder1 {}'.format(net.get_shape()))
+        with tf.name_scope('Decoder_2'):
+            net4 = L.deconv(net3, name='deconv2_1', kh=3, kw=3, n_out=32)
+            net4 = L.deconv(net4, name='deconv2_2', kh=3, kw=3, n_out=32)
+            net4 = L.upsample(net4)
+            print('Decoder2 {}'.format(net.get_shape()))
         with tf.name_scope('Output'):
             out = L.conv(net4, 'conv_out', kh=3, kw=3, n_out=2)
             print('Logit tensor: {}'.format(out.get_shape()))
         return out
 
-
-    def network_linear(self, x):
-        input_shape = x.get_shape()
-        batch_size = tf.shape(x)[0]
-        output_shape = tf.stack([batch_size, input_shape[1].value, input_shape[2].value, 1])
-        with tf.name_scope('Encoder_1'):
-            net1 = L.flatten(x)
-            net1 = L.linear(net1, 1024, 'lin_1')
-            net1 = tf.nn.relu(net1)
-        with tf.name_scope('Encoder_2'):
-            net2 = L.linear(net1, 512, 'lin_2')
-            net2 = tf.nn.relu(net2)
-        with tf.name_scope('Shape'):
-            net3 = L.linear(net2, input_shape[1].value * input_shape[2].value, 'lin_3')
-            net3 = tf.nn.sigmoid(net3)
-            out = tf.reshape(net3, output_shape)
-        print('Logit tensor: {}'.format(out.get_shape()))
+    def network_softmax(self, x, phase=0):
+        with tf.name_scope('Encoder'):
+            net1 = L.conv(x, name='conv1_1', kh=3, kw=3, n_out=32, phase=phase)
+            net2 = L.conv(x, name='conv1_2', kh=5, kw=5, n_out=32, phase=phase)
+            net3 = L.conv(x, name='conv1_3', kh=9, kw=9, n_out=32, phase=phase)
+        with tf.name_scope('Concat'):
+            net4 = tf.concat(3, [net1, net2, net3])
+            print('Net4 tensor: {}'.format(net4.get_shape()))
+        with tf.name_scope('Output'):
+            out = L.conv(net4, 'conv_shape', kh=3, kw=3, n_out=1)
+            out = L.flatten(out)
+            print('Logit tensor: {}'.format(out.get_shape()))
         return out
 
     def main(self):
@@ -164,34 +139,42 @@ class Main:
         log_dir = os.path.join(self.sets.logdir, log)
         data_reader = DataReaderH5()
         data_reader.readH5(self.sets.datapath)
-        data_reader.unfold_targets()
+        val_img, val_mask = data_reader.fetch_random_validation_set_from_training(40)
+        val_mask = np.reshape(val_mask, (val_mask.shape[0], val_mask.shape[1] * val_mask.shape[2] * val_mask.shape[3]))
+        data_reader.y = np.reshape(data_reader.y,
+                                   (data_reader.y.shape[0],
+                                    data_reader.y.shape[1] * data_reader.y.shape[2] * data_reader.y.shape[3]))
+        # data_reader.unfold_targets()
 
         print('db_list length: {}'.format(data_reader.x.shape[0]))
 
         # generate the network
         print('creating the net')
-        input_tensor = tf.placeholder(tf.float32,
-                                      shape=[None, data_reader.x.shape[1],
-                                             data_reader.x.shape[2], data_reader.x.shape[3]],
-                                      name='x_input')
-        labels_tensor = tf.placeholder(tf.float32,
-                                       shape=[None, data_reader.y.shape[1], data_reader.y.shape[2],
-                                              data_reader.y.shape[3]],
-                                       name='y_input')
-        print('Input tensor {}'.format(input_tensor.get_shape()))
-        print('labels tensor {}'.format(labels_tensor.get_shape()))
-        self.logits = self.network_softmax(input_tensor)
+        x = tf.placeholder(tf.float32,
+                           shape=[None, data_reader.x.shape[1],
+                                  data_reader.x.shape[2], data_reader.x.shape[3]],
+                           name='x_input')
+        y = tf.placeholder(tf.float32,
+                           shape=[None, data_reader.y.shape[1]],
+                           name='y_input')
+        lr = tf.placeholder(tf.float32)
+        phase = tf.placeholder(tf.bool, name='phase')
+
+        print('Input tensor {}'.format(x.get_shape()))
+        print('labels tensor {}'.format(y.get_shape()))
+        self.logits = self.network_squeeze(x)
 
 
         # compute the loss
         with tf.name_scope('Cost'):
-            # self.cost = tf.sqrt(tf.reduce_mean(tf.square(tf.subtract(self.logits, labels_tensor))))
-            self.cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(self.logits, labels_tensor, dim=-1))
+            # self.cost = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(self.logits, y))))
+            self.cost = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(self.logits, y))
         with tf.name_scope('Optimizer'):
-            self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.cost)
+            self.optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(self.cost)
 
         tf.summary.scalar('loss', self.cost)
-        tf.summary.image('input', input_tensor, max_outputs=3)
+        tf.summary.scalar('learning_rate', lr)
+        tf.summary.image('input', x, max_outputs=3)
         merged_summary_op = tf.summary.merge_all()
         summary_writer = tf.summary.FileWriter(log_dir, graph=tf.get_default_graph(), flush_secs=10)
         init = tf.global_variables_initializer()
@@ -199,8 +182,6 @@ class Main:
         with tf.Session() as sess:
             print('Entering the session.')
             sess.run(init)
-            # Create a random validation set from data_reader
-            val_img, val_mask = data_reader.fetch_random_validation_set_from_training(b_size=self.batch_size)
             # Start cycling epochs
             myiter = 0
             for epoch in range(0, self.epochs):
@@ -211,18 +192,17 @@ class Main:
                     # fetch batch and labels
                     batch_data, batch_target = data_reader.next_batch(self.batch_size)
                     # run optimization
-                    _, cost = sess.run([self.optimizer, self.cost], feed_dict={input_tensor: batch_data,
-                                                                               labels_tensor: batch_target})
+                    sess.run(self.optimizer, feed_dict={x: batch_data,
+                                                        y: batch_target,
+                                                        phase: 1,
+                                                        lr: 0.0001 + np.float32(myiter) * 0.0001})
                     # print('sample {}/{} cost: {}'.format(it, len(data_reader.x), cost))
 
                 val_loss, summary = sess.run([self.cost, merged_summary_op],
-                                             feed_dict={input_tensor: val_img,
-                                                        labels_tensor: val_mask})
-                # vals = sess.run([self.logits], feed_dict={input_tensor: val_img, labels_tensor: val_mask})
-                # output = vals[0]
-                # for i in range(0, len(output)):
-                #     T.show_image(output[i], self.sets.logdir)
-                # tf.summary.image('Output', self.logits)
+                                             feed_dict={x: val_img,
+                                                        y: val_mask,
+                                                        phase: 0,
+                                                        lr: 0.0001 + np.float32(myiter) * 0.0001})
                 summary_writer.add_summary(summary, epoch)
                 print('Accuracy for epoch {}: {}'.format(epoch, val_loss))
                 print('Time for epoch: {}'.format(time.time() - te))

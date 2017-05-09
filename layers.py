@@ -8,10 +8,10 @@ def conv(input_tensor, name, kw, kh, n_out, dw=1, dh=1, activation_fn=tf.nn.relu
     n_in = input_tensor.get_shape()[-1].value
 
     # open a scope which is good for reusing the weights
-    with tf.variable_scope(name):
+    with tf.variable_scope(name) as scope:
         weights = tf.get_variable('weights', [kh, kw, n_in, n_out], tf.float32,
-                                  initializer=tf.truncated_normal_initializer(mean=0.0, stddev=1.0))
-        biases = tf.get_variable('bias', [n_out], tf.float32, initializer=tf.constant_initializer(0))
+                                  initializer=tf.truncated_normal_initializer())
+        biases = tf.get_variable('bias', [n_out], tf.float32, initializer=tf.constant_initializer())
 
         # create the convolution
         conv = tf.nn.conv2d(input_tensor, weights, (1, dh, dw, 1), padding='SAME')
@@ -19,7 +19,7 @@ def conv(input_tensor, name, kw, kh, n_out, dw=1, dh=1, activation_fn=tf.nn.relu
         logit = tf.nn.bias_add(conv, biases)
         logit = tf.contrib.layers.batch_norm(logit, center=True, scale=True, is_training=phase, scope='bn')
         # perform activation
-        activation = activation_fn(logit)
+        activation = activation_fn(logit, name=scope.name)
     return activation
 
 
@@ -92,14 +92,14 @@ def flatten(input_tensor):
     return tmp_tensor
 
 
-def linear(input_, output_size, name, stddev=1, bias_start=0.1, with_w=False):
+def linear(input_, output_size, name, stddev=0.1, bias_start=0.1, with_w=False):
     shape = input_.get_shape().as_list()
 
-    with tf.variable_scope(name):
+    with tf.variable_scope(name) as scope:
         matrix = tf.get_variable("weights", [shape[1], output_size], tf.float32,
-                                 tf.truncated_normal_initializer(stddev=stddev))
+                                 tf.truncated_normal_initializer())
         bias = tf.get_variable("biases", [output_size],
-                               initializer=tf.constant_initializer(bias_start))
+                               initializer=tf.constant_initializer())
         if with_w:
             return tf.matmul(input_, matrix) + bias, matrix, bias
         else:

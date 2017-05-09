@@ -63,7 +63,7 @@ class DataHandler:
         ord = [i for i in range(n_imgs)]
         rand.shuffle(ord)
         self.x = self.x[ord, :, :, :]
-        self.y = self.y[ord, :, :, :]
+        self.y = self.y[ord, :]
         return ord
 
     def next_batch(self, b_size):
@@ -71,7 +71,7 @@ class DataHandler:
         # check if the batch is finished or returning 0
         self.b_pointer += b_size
         batch_imgs = self.x[b_idx[0]:b_idx[1], :, :, :]
-        batch_masks = self.y[b_idx[0]:b_idx[1], :, :, :]
+        batch_masks = self.y[b_idx[0]:b_idx[1], :]
         if len(batch_imgs) < b_size:
             self.shuffle_db()
             self.b_pointer = 0
