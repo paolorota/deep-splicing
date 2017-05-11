@@ -11,6 +11,7 @@ from layers2 import *
 from tqdm import tqdm
 import random as rand
 from six.moves import xrange
+import scipy
 
 def conv_out_size_same(size, stride):
     return int(math.ceil(float(size) / float(stride)))
@@ -60,7 +61,7 @@ class Main:
         self.batch_size = 32
         self.learning_rate = 0.0001
         self.epochs = 5000
-        self.sample_num = 64
+        self.sample_num = 32
 
         self.d_bn1 = batch_norm(name='d_bn1')
         self.d_bn2 = batch_norm(name='d_bn2')
@@ -107,7 +108,7 @@ class Main:
 
             h4, self.h4_w, self.h4_b = deconv2d(
                 h3, [self.batch_size, s_h, s_w, self.c_dim], name='g_h4', with_w=True)
-            return tf.nn.tanh(h4)
+            return tf.nn.sigmoid(h4)
 
     def discriminator(self, image, reuse=False):
         with tf.variable_scope("discriminator") as scope:
@@ -118,22 +119,45 @@ class Main:
             h2 = lrelu(self.d_bn2(conv2d(h1, self.df_dim * 4, name='d_h2_conv')))
             h3 = lrelu(self.d_bn3(conv2d(h2, self.df_dim * 8, name='d_h3_conv')))
             h4 = linear(tf.reshape(h3, [self.batch_size, -1]), 1, 'd_h3_lin')
-
             return tf.nn.sigmoid(h4), h4
+
+    def sampler(self, z):
+        with tf.variable_scope("generator") as scope:
+            scope.reuse_variables()
+
+            s_h, s_w = self.size_image, self.size_image
+            s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
+            s_h4, s_w4 = conv_out_size_same(s_h2, 2), conv_out_size_same(s_w2, 2)
+            s_h8, s_w8 = conv_out_size_same(s_h4, 2), conv_out_size_same(s_w4, 2)
+            s_h16, s_w16 = conv_out_size_same(s_h8, 2), conv_out_size_same(s_w8, 2)
+
+            # project `z` and reshape
+            h0 = tf.reshape(
+                linear(z, self.gf_dim * 8 * s_h16 * s_w16, 'g_h0_lin'),
+                [-1, s_h16, s_w16, self.gf_dim * 8])
+            h0 = tf.nn.relu(self.g_bn0(h0, train=False))
+            h1 = deconv2d(h0, [self.sample_num, s_h8, s_w8, self.gf_dim * 4], name='g_h1')
+            h1 = tf.nn.relu(self.g_bn1(h1, train=False))
+            h2 = deconv2d(h1, [self.sample_num, s_h4, s_w4, self.gf_dim * 2], name='g_h2')
+            h2 = tf.nn.relu(self.g_bn2(h2, train=False))
+            h3 = deconv2d(h2, [self.sample_num, s_h2, s_w2, self.gf_dim * 1], name='g_h3')
+            h3 = tf.nn.relu(self.g_bn3(h3, train=False))
+            h4 = deconv2d(h3, [self.sample_num, s_h, s_w, self.c_dim], name='g_h4')
+            return tf.nn.sigmoid(h4)
 
     def build_gan(self):
         print('creating the net')
         self.x = tf.placeholder(tf.float32,
                                 shape=[self.batch_size, self.size_image, self.size_image, self.n_channels],
                                 name='x_input')
-        self.s = tf.placeholder(tf.float32,
-                                shape=[self.batch_size, self.size_image, self.size_image, self.n_channels],
-                                name='x_input')
+        # self.s = tf.placeholder(tf.float32,
+        #                         shape=[self.sample_num, self.size_image, self.size_image, self.n_channels],
+        #                         name='x_input')
         ## Al momento non utilizzo la mask
         # self.y = tf.placeholder(tf.float32,
         #                         shape=[self.batch_size, self.size_image, self.size_image, 1],
         #                         name='x_input')
-        self.z = tf.placeholder(tf.float32, [self.batch_size, self.z_dim], name='z_input')
+        self.z = tf.placeholder(tf.float32, [None, self.z_dim], name='z_input')
         # TODO: maybe use the learning rate!
         self.lr = tf.placeholder(tf.float32, name='learning_rate')
 
@@ -141,6 +165,7 @@ class Main:
         self.D, self.D_logits = self.discriminator(self.x, reuse=False)
         self.D_, self.D_logits_ = self.discriminator(self.G, reuse=True)
         # TODO: do we need a sampler?? if yes, implement it!
+        self.S = self.sampler(self.z)
 
         print('Noise tensor {}'.format(self.z.get_shape()))
         print('Image tensor {}'.format(self.x.get_shape()))
@@ -163,7 +188,7 @@ class Main:
         self.d_vars = [var for var in t_vars if 'd_' in var.name]
         self.g_vars = [var for var in t_vars if 'g_' in var.name]
 
-    def train_gan(self, sess, logdir):
+    def train_gan(self, sess):
         d_optim = tf.train.AdamOptimizer(learning_rate=0.0002, beta1=0.5).minimize(self.d_loss, var_list=self.d_vars)
         g_optim = tf.train.AdamOptimizer(learning_rate=0.0002, beta1=0.5).minimize(self.g_loss, var_list=self.g_vars)
         tf.global_variables_initializer().run()
@@ -175,14 +200,14 @@ class Main:
         self.d_sum = tf.summary.merge([
             self.d_loss_sum
         ])
-        self.writer = tf.summary.FileWriter(logdir, sess.graph)
+        self.writer = tf.summary.FileWriter(self.log_dir, sess.graph)
 
         # sampling random noise
         sample_z = np.random.uniform(-1, 1, size=(self.sample_num, self.z_dim))
 
         # sample inputs and labels
         sample_inputs = self.data_reader.x[0:self.sample_num]
-        sample_labels = self.data_reader.y[0:self.sample_num]
+        # sample_labels = self.data_reader.y[0:self.sample_num]
 
         counter = 1
         for epoch in xrange(self.epochs):
@@ -223,21 +248,41 @@ class Main:
                 errG = self.g_loss.eval({
                     self.z: batch_z
                 })
-                counter += 1
+                # counter += 1
                 print('Epoch [{0}] [{1}/{2}] d_loss: {3:.8} g_loss: {4:.8}'.format(
                     epoch, idx, batch_idxs, errD_fake+errD_real, errG
                 ))
 
+                # save images every 100 batch iters
+                if np.mod(counter, 100) == 1:
+                    samples, d_loss, g_loss = sess.run(
+                        [self.S, self.d_loss, self.g_loss],
+                        feed_dict={
+                            self.z: sample_z,
+                            self.x: sample_inputs
+                        }
+                    )
+                    manifold_h = int(np.ceil(np.sqrt(samples.shape[0])))
+                    manifold_w = int(np.ceil(np.sqrt(samples.shape[0])))
+                    save_images(samples, [manifold_h, manifold_w], './{}/train_{:02d}_{:04d}.png'.format(
+                        self.sample_dir, epoch, idx))
+                    print("[Sample] d_loss: {0:.8}, g_loss: {1:.8}".format(d_loss, g_loss))
+                counter += 1
 
     def main(self):
         launch_time = datetime.datetime.now()
-        log = 'log_{0:4}{1:2}{2:2}_{3:2}{4:2}{5:2}'.format(launch_time.year,
-                                                           launch_time.month,
-                                                           launch_time.day,
-                                                           launch_time.hour,
-                                                           launch_time.minute,
-                                                           launch_time.second).replace(' ', '0')
-        log_dir = os.path.join(self.sets.logdir, log)
+        log = 'fgan_{0:4}{1:2}{2:2}_{3:2}{4:2}{5:2}'.format(launch_time.year,
+                                                            launch_time.month,
+                                                            launch_time.day,
+                                                            launch_time.hour,
+                                                            launch_time.minute,
+                                                            launch_time.second).replace(' ', '0')
+        self.log_dir = os.path.join(self.sets.logdir, log)
+        if not os.path.exists(self.sets.logdir):
+            os.mkdir(self.sets.logdir)
+        self.sample_dir = os.path.join('./samples', log)
+        if not os.path.exists(self.sample_dir):
+            os.mkdir(self.sample_dir)
         self.data_reader = DataReaderH5(self.sets.datapath)
         val_img, val_mask = self.data_reader.fetch_random_validation_set_from_training(40)
 
@@ -247,49 +292,38 @@ class Main:
         self.build_gan()
 
         with tf.Session() as sess:
-            self.train_gan(sess=sess, logdir=log_dir)
+            self.train_gan(sess=sess)
 
-        # # compute the loss
-        # with tf.name_scope('Cost'):
-        #     # self.cost = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(self.logits, y))))
-        #     self.cost = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(self.logits, y))
-        # with tf.name_scope('Optimizer'):
-        #     self.optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(self.cost)
-        #
-        # tf.summary.scalar('loss', self.cost)
-        # tf.summary.scalar('learning_rate', lr)
-        # tf.summary.image('input', x, max_outputs=3)
-        # merged_summary_op = tf.summary.merge_all()
-        # summary_writer = tf.summary.FileWriter(log_dir, graph=tf.get_default_graph(), flush_secs=10)
-        # init = tf.global_variables_initializer()
-        #
-        # with tf.Session() as sess:
-        #     print('Entering the session.')
-        #     sess.run(init)
-        #     # Start cycling epochs
-        #     myiter = 0
-        #     for epoch in range(0, self.epochs):
-        #         te = time.time()
-        #         print('+*+* Starting Epoch {}'.format(data_reader.epoch))
-        #         for it in range(0, len(data_reader.x), self.batch_size):
-        #             myiter += 1
-        #             # fetch batch and labels
-        #             batch_data, batch_target = data_reader.next_batch(self.batch_size)
-        #             # run optimization
-        #             sess.run(self.optimizer, feed_dict={x: batch_data,
-        #                                                 y: batch_target,
-        #                                                 phase: 1,
-        #                                                 lr: 0.0001 + np.float32(myiter) * 0.0001})
-        #             # print('sample {}/{} cost: {}'.format(it, len(data_reader.x), cost))
-        #
-        #         val_loss, summary = sess.run([self.cost, merged_summary_op],
-        #                                      feed_dict={x: val_img,
-        #                                                 y: val_mask,
-        #                                                 phase: 0,
-        #                                                 lr: 0.0001 + np.float32(myiter) * 0.0001})
-        #         summary_writer.add_summary(summary, epoch)
-        #         print('Accuracy for epoch {}: {}'.format(epoch, val_loss))
-        #         print('Time for epoch: {}'.format(time.time() - te))
+
+def merge(images, size):
+    h, w = images.shape[1], images.shape[2]
+    if images.shape[3] in (3,4):
+        c = images.shape[3]
+        img = np.zeros((h * size[0], w * size[1], c))
+        for idx, image in enumerate(images):
+            i = idx % size[1]
+            j = idx // size[1]
+            img[j * h:j * h + h, i * w:i * w + w, :] = image
+        return img
+    elif images.shape[3] == 1:
+        img = np.zeros((h * size[0], w * size[1]))
+        for idx, image in enumerate(images):
+            i = idx % size[1]
+            j = idx // size[1]
+            img[j * h:j * h + h, i * w:i * w + w] = image[:,:,0]
+        return img
+    else:
+        raise ValueError('in merge(images,size) images parameter '
+                         'must have dimensions: HxW or HxWx3 or HxWx4')
+
+
+def save_images(images, size, image_path):
+    return imsave(images, size, image_path)
+
+
+def imsave(images, size, path):
+    image = np.squeeze(merge(images, size))
+    return scipy.misc.imsave(path, image)
 
 
 if __name__ == '__main__':

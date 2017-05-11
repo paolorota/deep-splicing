@@ -49,7 +49,7 @@ class Settings:
 
 
 t0 = time()
-patch_size = 80
+patch_size = 128
 launch_time = datetime.datetime.now()
 fileout_root = '{0:4}{1:2}{2:2}_{3:2}{4:2}{5:2}_p{6}x{6}.h5'.format(launch_time.year,
                                                                     launch_time.month,
