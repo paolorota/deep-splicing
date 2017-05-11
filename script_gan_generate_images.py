@@ -45,14 +45,6 @@ class DataReaderH5:
             self.x = f['x'].value
             self.y = f['y'].value
 
-    def fetch_random_validation_set_from_training(self, b_size):
-        r = rand.randint(0, len(self.x) - b_size)
-        b_idx = [r, r + b_size]
-        batch_imgs = self.x[b_idx[0]:b_idx[1], :, :, :]
-        batch_masks = self.y[b_idx[0]:b_idx[1], :, :, :]
-        return batch_imgs, batch_masks
-
-
 class Main:
     def __init__(self, sets):
         self.sets = sets
@@ -284,7 +276,6 @@ class Main:
         if not os.path.exists(self.sample_dir):
             os.mkdir(self.sample_dir)
         self.data_reader = DataReaderH5(self.sets.datapath)
-        val_img, val_mask = self.data_reader.fetch_random_validation_set_from_training(40)
 
         print('db_list length: {}'.format(self.data_reader.x.shape[0]))
 
