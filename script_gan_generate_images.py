@@ -7,7 +7,7 @@ from scipy import misc
 import matplotlib.pyplot as plt
 import h5py
 import time
-from layers2 import *
+from layers import *
 from tqdm import tqdm
 import random as rand
 from six.moves import xrange
@@ -62,106 +62,144 @@ class Main:
         self.g_bn1 = batch_norm(name='g_bn1')
         self.g_bn2 = batch_norm(name='g_bn2')
         self.g_bn3 = batch_norm(name='g_bn3')
+        self.g_bn4 = batch_norm(name='g_bn4')
 
         self.gf_dim = 64
         self.gfc_dim = 1024
-        self.c_dim = 3  # mask is one channel
+        self.c_dim = 1  # mask is one channel
         self.df_dim = 64
 
         self.z_dim = 100
 
-    def generator(self, z):
+    def generator(self, x):
         with tf.variable_scope("generator") as scope:
-            s_h, s_w = self.size_image, self.size_image
-            s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
-            s_h4, s_w4 = conv_out_size_same(s_h2, 2), conv_out_size_same(s_w2, 2)
-            s_h8, s_w8 = conv_out_size_same(s_h4, 2), conv_out_size_same(s_w4, 2)
-            s_h16, s_w16 = conv_out_size_same(s_h8, 2), conv_out_size_same(s_w8, 2)
+            # to 128x128x3 --> 128x128x1
+            h0_ = lrelu(conv2d(x, 1, d_h=1, d_w=1, name='g_hA_conv'))
+            s_h0_ = h0_.get_shape()
+            # down to 64x64x64
+            h0 = lrelu(conv2d(h0_, self.gf_dim, name='g_h0_conv'))
+            s_h0 = h0.get_shape()
+            # down to 32x32x128
+            h1 = lrelu(conv2d(h0, self.gf_dim * 2, name='g_h1_conv'))
+            s_h1 = h1.get_shape()
+            # down to 16x16x256
+            h2 = lrelu(conv2d(h1, self.gf_dim * 4, name='g_h2_conv'))
+            s_h2 = h2.get_shape()
+            # down to 8x8x512
+            h3 = lrelu(conv2d(h2, self.gf_dim * 8, name='g_h3_conv'))
+            s_h3 = h3.get_shape()
 
-            # project `z` and reshape
-            self.z_, self.h0_w, self.h0_b = linear(
-                z, self.gf_dim * 8 * s_h16 * s_w16, 'g_h0_lin', with_w=True)
+            # up to 16x16x256
+            h4, h4_w, h4_b = deconv2d(
+                h3, [self.batch_size, s_h2[1].value, s_h2[2].value, self.gf_dim * 4], name='g_h4', with_w=True)
+            h4 = tf.nn.relu(self.g_bn4(h4))
+            # merge h4 and h2 --> 16x16x512
+            h5 = concat([h4, h2], 3)
+            # up to 32x32x128
+            h5, h5_w, h5_b = deconv2d(
+                h5, [self.batch_size, s_h1[1].value, s_h1[2].value, self.gf_dim * 2], name='g_h5', with_w=True)
+            h5 = tf.nn.relu(self.g_bn3(h5))
+            # merge h5 and h1 --> 32x32x256
+            h6 = concat([h5, h1], 3)
+            # up to 64x64x128
+            h6, h6_w, h6_b = deconv2d(
+                h6, [self.batch_size, s_h0[1].value, s_h0[2].value, self.gf_dim], name='g_h6', with_w=True)
+            h6 = tf.nn.relu(self.g_bn2(h6))
+            # merge h6 and h0 --> 64x64x128
+            h7 = concat([h6, h0], 3)
+            # up to 128x128x1
+            h7, h7_w, h7_b = deconv2d(
+                h7, [self.batch_size, s_h0_[1].value, s_h0_[2].value, self.c_dim], name='g_h7', with_w=True)
+            return tf.nn.sigmoid(h7)
 
-            self.h0 = tf.reshape(
-                self.z_, [-1, s_h16, s_w16, self.gf_dim * 8])
-            h0 = tf.nn.relu(self.g_bn0(self.h0))
+    def sampler(self, x):
+        with tf.variable_scope("generator") as scope:
+            scope.reuse_variables()
+            # to 128x128x3 --> 128x128x1
+            h0_ = lrelu(conv2d(x, 1, d_h=1, d_w=1, name='g_hA_conv'))
+            s_h0_ = h0_.get_shape()
+            # down to 64x64x64
+            h0 = lrelu(conv2d(h0_, self.gf_dim, name='g_h0_conv'))
+            s_h0 = h0.get_shape()
+            # down to 32x32x128
+            h1 = lrelu(conv2d(h0, self.gf_dim * 2, name='g_h1_conv'))
+            s_h1 = h1.get_shape()
+            # down to 16x16x256
+            h2 = lrelu(conv2d(h1, self.gf_dim * 4, name='g_h2_conv'))
+            s_h2 = h2.get_shape()
+            # down to 8x8x512
+            h3 = lrelu(conv2d(h2, self.gf_dim * 8, name='g_h3_conv'))
+            s_h3 = h3.get_shape()
 
-            self.h1, self.h1_w, self.h1_b = deconv2d(
-                h0, [self.batch_size, s_h8, s_w8, self.gf_dim * 4], name='g_h1', with_w=True)
-            h1 = tf.nn.relu(self.g_bn1(self.h1))
+            # up to 16x16x256
+            h4, h4_w, h4_b = deconv2d(
+                h3, [self.batch_size, s_h2[1].value, s_h2[2].value, self.gf_dim * 4], name='g_h4', with_w=True)
+            h4 = tf.nn.relu(self.g_bn4(h4))
+            # merge h4 and h2 --> 16x16x512
+            h5 = concat([h4, h2], 3)
+            # up to 32x32x128
+            h5, h5_w, h5_b = deconv2d(
+                h5, [self.batch_size, s_h1[1].value, s_h1[2].value, self.gf_dim * 2], name='g_h5', with_w=True)
+            h5 = tf.nn.relu(self.g_bn3(h5))
+            # merge h5 and h1 --> 32x32x256
+            h6 = concat([h5, h1], 3)
+            # up to 64x64x128
+            h6, h6_w, h6_b = deconv2d(
+                h6, [self.batch_size, s_h0[1].value, s_h0[2].value, self.gf_dim], name='g_h6', with_w=True)
+            h6 = tf.nn.relu(self.g_bn2(h6))
+            # merge h6 and h0 --> 64x64x128
+            h7 = concat([h6, h0], 3)
+            # up to 128x128x1
+            h7, h7_w, h7_b = deconv2d(
+                h7, [self.batch_size, s_h0_[1].value, s_h0_[2].value, self.c_dim], name='g_h7', with_w=True)
+            return tf.nn.sigmoid(h7)
 
-            h2, self.h2_w, self.h2_b = deconv2d(
-                h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2], name='g_h2', with_w=True)
-            h2 = tf.nn.relu(self.g_bn2(h2))
-
-            h3, self.h3_w, self.h3_b = deconv2d(
-                h2, [self.batch_size, s_h2, s_w2, self.gf_dim * 1], name='g_h3', with_w=True)
-            h3 = tf.nn.relu(self.g_bn3(h3))
-
-            h4, self.h4_w, self.h4_b = deconv2d(
-                h3, [self.batch_size, s_h, s_w, self.c_dim], name='g_h4', with_w=True)
-            return tf.nn.sigmoid(h4)
-
-    def discriminator(self, image, reuse=False):
-        with tf.variable_scope("discriminator") as scope:
+    def siamese_tower(self, image, reuse=False):
+        with tf.variable_scope("siamese_tower") as scope:
             if reuse:
                 scope.reuse_variables()
             h0 = lrelu(conv2d(image, self.df_dim, name='d_h0_conv'))
             h1 = lrelu(self.d_bn1(conv2d(h0, self.df_dim * 2, name='d_h1_conv')))
             h2 = lrelu(self.d_bn2(conv2d(h1, self.df_dim * 4, name='d_h2_conv')))
             h3 = lrelu(self.d_bn3(conv2d(h2, self.df_dim * 8, name='d_h3_conv')))
-            h4 = linear(tf.reshape(h3, [self.batch_size, -1]), 1, 'd_h3_lin')
-            return tf.nn.sigmoid(h4), h4
+            h4 = linear(tf.reshape(h3, [self.batch_size, -1]), 128, 'd_h3_lin')
+            return h4
 
-    def sampler(self, z):
-        with tf.variable_scope("generator") as scope:
-            scope.reuse_variables()
-
-            s_h, s_w = self.size_image, self.size_image
-            s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
-            s_h4, s_w4 = conv_out_size_same(s_h2, 2), conv_out_size_same(s_w2, 2)
-            s_h8, s_w8 = conv_out_size_same(s_h4, 2), conv_out_size_same(s_w4, 2)
-            s_h16, s_w16 = conv_out_size_same(s_h8, 2), conv_out_size_same(s_w8, 2)
-
-            # project `z` and reshape
-            h0 = tf.reshape(
-                linear(z, self.gf_dim * 8 * s_h16 * s_w16, 'g_h0_lin'),
-                [-1, s_h16, s_w16, self.gf_dim * 8])
-            h0 = tf.nn.relu(self.g_bn0(h0, train=False))
-            h1 = deconv2d(h0, [self.sample_num, s_h8, s_w8, self.gf_dim * 4], name='g_h1')
-            h1 = tf.nn.relu(self.g_bn1(h1, train=False))
-            h2 = deconv2d(h1, [self.sample_num, s_h4, s_w4, self.gf_dim * 2], name='g_h2')
-            h2 = tf.nn.relu(self.g_bn2(h2, train=False))
-            h3 = deconv2d(h2, [self.sample_num, s_h2, s_w2, self.gf_dim * 1], name='g_h3')
-            h3 = tf.nn.relu(self.g_bn3(h3, train=False))
-            h4 = deconv2d(h3, [self.sample_num, s_h, s_w, self.c_dim], name='g_h4')
-            return tf.nn.sigmoid(h4)
+    def siamese_discriminator(self, image, mask, reuse=False):
+        with tf.variable_scope("discriminator") as scope:
+            if reuse:
+                scope.reuse_variables()
+            t0 = lrelu(conv2d(image, 1, d_h=1, d_w=1, name='d_hA_conv'))
+            t1 = self.siamese_tower(t0, reuse=reuse)
+            t2 = self.siamese_tower(mask, reuse=True)
+            t3 = concat([t1, t2], 1)
+            t4 = linear(t3, 1, 'd_h4_lin')
+            return tf.nn.sigmoid(t4), t4
 
     def build_gan(self):
         print('creating the net')
         self.x = tf.placeholder(tf.float32,
                                 shape=[self.batch_size, self.size_image, self.size_image, self.n_channels],
-                                name='x_input')
+                                name='img_input')
         # self.s = tf.placeholder(tf.float32,
         #                         shape=[self.sample_num, self.size_image, self.size_image, self.n_channels],
         #                         name='x_input')
         ## Al momento non utilizzo la mask
-        # self.y = tf.placeholder(tf.float32,
-        #                         shape=[self.batch_size, self.size_image, self.size_image, 1],
-        #                         name='x_input')
-        self.z = tf.placeholder(tf.float32, [None, self.z_dim], name='z_input')
+        self.y = tf.placeholder(tf.float32,
+                                shape=[self.batch_size, self.size_image, self.size_image, 1],
+                                name='mask_input')
+        # self.z = tf.placeholder(tf.float32, [None, self.z_dim], name='z_input')
         # TODO: maybe use the learning rate!
         self.lr = tf.placeholder(tf.float32, name='learning_rate')
 
-        self.G = self.generator(self.z)
-        self.D, self.D_logits = self.discriminator(self.x, reuse=False)
-        self.D_, self.D_logits_ = self.discriminator(self.G, reuse=True)
-        # TODO: do we need a sampler?? if yes, implement it!
-        self.S = self.sampler(self.z)
+        self.G = self.generator(self.x)
+        self.D, self.D_logits = self.siamese_discriminator(self.x, self.y, reuse=False)
+        self.D_, self.D_logits_ = self.siamese_discriminator(self.x, self.G, reuse=True)
+        self.S = self.sampler(self.x)
 
-        print('Noise tensor {}'.format(self.z.get_shape()))
+        # print('Noise tensor {}'.format(self.z.get_shape()))
         print('Image tensor {}'.format(self.x.get_shape()))
-        # print('Mask tensor {}'.format(self.y.get_shape()))
+        print('Mask tensor {}'.format(self.y.get_shape()))
 
         self.d_loss_real = tf.reduce_mean(
             tf.nn.sigmoid_cross_entropy_with_logits(logits=self.D_logits, targets=tf.ones_like(self.D)))
@@ -195,11 +233,11 @@ class Main:
         self.writer = tf.summary.FileWriter(self.log_dir, sess.graph)
 
         # sampling random noise
-        sample_z = np.random.uniform(-1, 1, size=(self.sample_num, self.z_dim))
+        # sample_z = np.random.uniform(-1, 1, size=(self.sample_num, self.z_dim))
 
         # sample inputs and labels
         sample_inputs = self.data_reader.x[0:self.sample_num]
-        # sample_labels = self.data_reader.y[0:self.sample_num]
+        sample_labels = self.data_reader.y[0:self.sample_num]
 
         counter = 1
         for epoch in xrange(self.epochs):
@@ -208,14 +246,14 @@ class Main:
 
             for idx in xrange(0, batch_idxs):
                 batch_images = self.data_reader.x[idx*self.batch_size:(idx+1)*self.batch_size]
-                # batch_labels = self.data_reader.y[idx*self.batch_size:(idx+1)*self.batch_size]
-                batch_z = np.random.uniform(-1, 1, [self.batch_size, self.z_dim]).astype(np.float32)
+                batch_labels = self.data_reader.y[idx*self.batch_size:(idx+1)*self.batch_size]
+                # batch_z = np.random.uniform(-1, 1, [self.batch_size, self.z_dim]).astype(np.float32)
 
                 # Update D network
                 _, summary_str = sess.run([d_optim, self.d_sum],
                                           feed_dict={
                                               self.x: batch_images,
-                                              self.z: batch_z
+                                              self.y: batch_labels
                                           })
                 # step = (np.float32(epoch) + 1)+(np.float32(idx)/np.float32(batch_idxs))
                 self.writer.add_summary(summary=summary_str, global_step=counter)
@@ -224,21 +262,23 @@ class Main:
                 for j in xrange(2):
                     _, summary_str = sess.run([g_optim, self.g_sum],
                                               feed_dict={
-                                                  self.z: batch_z
+                                                  self.x: batch_images,
+                                                  self.y: batch_labels
                                               })
                 self.writer.add_summary(summary=summary_str, global_step=counter)
 
                 # compute error on training
                 errD_fake = self.d_loss_fake.eval({
                     self.x: batch_images,
-                    self.z: batch_z
+                    self.y: batch_labels
                 })
                 errD_real = self.d_loss_real.eval({
                     self.x: batch_images,
-                    self.z: batch_z
+                    self.y: batch_labels
                 })
                 errG = self.g_loss.eval({
-                    self.z: batch_z
+                    self.x: batch_images,
+                    self.y: batch_labels
                 })
                 # counter += 1
                 print('Epoch [{0}] [{1}/{2}] d_loss: {3:.8} g_loss: {4:.8}'.format(
@@ -250,13 +290,15 @@ class Main:
                     samples, d_loss, g_loss = sess.run(
                         [self.S, self.d_loss, self.g_loss],
                         feed_dict={
-                            self.z: sample_z,
-                            self.x: sample_inputs
+                            self.x: sample_inputs,
+                            self.y: sample_labels
                         }
                     )
                     manifold_h = int(np.ceil(np.sqrt(samples.shape[0])))
                     manifold_w = int(np.ceil(np.sqrt(samples.shape[0])))
-                    save_images(samples, [manifold_h, manifold_w], './{}/train_{:02d}_{:04d}.png'.format(
+                    save_images(samples, [manifold_h, manifold_w], './{}/train_{:02d}_{:04d}_rec.png'.format(
+                        self.sample_dir, epoch, idx))
+                    save_images(sample_labels, [manifold_h, manifold_w], './{}/train_{:02d}_{:04d}_mask.png'.format(
                         self.sample_dir, epoch, idx))
                     print("[Sample] d_loss: {0:.8}, g_loss: {1:.8}".format(d_loss, g_loss))
                 counter += 1
