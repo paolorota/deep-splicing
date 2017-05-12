@@ -52,7 +52,7 @@ class Main:
         self.n_channels = 3
         self.batch_size = 32
         self.learning_rate = 0.0001
-        self.epochs = 5000
+        self.epochs = 400
         self.sample_num = 32
 
         self.d_bn1 = batch_norm(name='d_bn1')
@@ -181,9 +181,6 @@ class Main:
         self.x = tf.placeholder(tf.float32,
                                 shape=[self.batch_size, self.size_image, self.size_image, self.n_channels],
                                 name='img_input')
-        # self.s = tf.placeholder(tf.float32,
-        #                         shape=[self.sample_num, self.size_image, self.size_image, self.n_channels],
-        #                         name='x_input')
         ## Al momento non utilizzo la mask
         self.y = tf.placeholder(tf.float32,
                                 shape=[self.batch_size, self.size_image, self.size_image, 1],
@@ -299,6 +296,8 @@ class Main:
                     save_images(samples, [manifold_h, manifold_w], './{}/train_{:02d}_{:04d}_rec.png'.format(
                         self.sample_dir, epoch, idx))
                     save_images(sample_labels, [manifold_h, manifold_w], './{}/train_{:02d}_{:04d}_mask.png'.format(
+                        self.sample_dir, epoch, idx))
+                    save_images(sample_inputs, [manifold_h, manifold_w], './{}/train_{:02d}_{:04d}_real.png'.format(
                         self.sample_dir, epoch, idx))
                     print("[Sample] d_loss: {0:.8}, g_loss: {1:.8}".format(d_loss, g_loss))
                 counter += 1
