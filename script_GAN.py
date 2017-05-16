@@ -12,6 +12,7 @@ from tqdm import tqdm
 import random as rand
 from six.moves import xrange
 import scipy
+from scipy.fftpack import dct
 
 def conv_out_size_same(size, stride):
     return int(math.ceil(float(size) / float(stride)))
@@ -52,6 +53,17 @@ class DataReaderH5:
             tmp_x = np.reshape(self.x[i], (self.x.shape[1], self.x.shape[2], self.x.shape[3]))
             x_new[i, :, :, 0] = np.dot(tmp_x, [0.299, 0.587, 0.114])
         self.x = x_new
+
+    def to_dct(self):
+        self.to_gray()
+        for i in range(self.x.shape[0]):
+            for y in range(0, self.x.shape[1], 8):
+                for x in range(0, self.x.shape[2], 8):
+                    tmp = self.x[i, y:y+8, x:x+8, 0]
+                    tmp = dct(dct(tmp, axis=0), axis=1)
+                    tmp[0, 0] = 0
+                    self.x[i, y:y + 8, x:x + 8, 0] = tmp
+
 
 
 class Main:
@@ -209,6 +221,9 @@ class Main:
         # TODO: maybe use the learning rate!
         self.lr = tf.placeholder(tf.float32, name='learning_rate')
 
+        self.x_sum = tf.summary.image("x", self.x)
+        self.y_sum = tf.summary.image("y", self.y)
+
         self.G = self.generator(self.x)
         self.D, self.D_logits = self.siamese_discriminator(self.x, self.y, reuse=False)
         self.D_, self.D_logits_ = self.siamese_discriminator(self.x, self.G, reuse=True)
@@ -217,6 +232,10 @@ class Main:
         # print('Noise tensor {}'.format(self.z.get_shape()))
         print('Image tensor {}'.format(self.x.get_shape()))
         print('Mask tensor {}'.format(self.y.get_shape()))
+        self.d_sum = tf.summary.histogram("d", self.D)
+        self.d__sum = tf.summary.histogram("d_", self.D_)
+        self.G_sum = tf.summary.image("G", self.G)
+
 
         self.d_loss_real = tf.reduce_mean(
             tf.nn.sigmoid_cross_entropy_with_logits(logits=self.D_logits, targets=tf.ones_like(self.D)))
@@ -242,11 +261,12 @@ class Main:
 
         # put together summaries
         self.g_sum = tf.summary.merge([
-            self.g_loss_sum
+            self.g_loss_sum, self.G_sum, self.d__sum
         ])
         self.d_sum = tf.summary.merge([
-            self.d_loss_sum
+            self.d_loss_sum, self.d_sum
         ])
+        self.in_sum = tf.summary.merge([self.x_sum, self.y_sum])
         self.writer = tf.summary.FileWriter(self.log_dir, sess.graph)
 
         # sampling random noise
@@ -267,13 +287,14 @@ class Main:
                 # batch_z = np.random.uniform(-1, 1, [self.batch_size, self.z_dim]).astype(np.float32)
 
                 # Update D network
-                _, summary_str = sess.run([d_optim, self.d_sum],
-                                          feed_dict={
-                                              self.x: batch_images,
-                                              self.y: batch_labels
-                                          })
+                _, summary_str, summary_str1 = sess.run([d_optim, self.d_sum, self.in_sum],
+                                                        feed_dict={
+                                                            self.x: batch_images,
+                                                            self.y: batch_labels
+                                                        })
                 # step = (np.float32(epoch) + 1)+(np.float32(idx)/np.float32(batch_idxs))
                 self.writer.add_summary(summary=summary_str, global_step=counter)
+                self.writer.add_summary(summary=summary_str1, global_step=counter)
 
                 # Update G (twice because it is suggested like so)
                 for j in xrange(2):
@@ -339,7 +360,9 @@ class Main:
         self.data_reader = DataReaderH5(self.sets.datapath)
         #optional
         if self.n_channels == 1:
-            self.data_reader.to_gray()
+            # print('Performing DCT 8x8 on self.x')
+            # self.data_reader.to_dct()
+            self.data_reader.to_dct()
 
         print('db_list length: {}'.format(self.data_reader.x.shape[0]))
 
