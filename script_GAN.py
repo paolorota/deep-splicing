@@ -24,6 +24,7 @@ class Settings:
         config.read(filename)
         self.logdir = config.get('General', 'logdir')
         self.datapath = config.get('Train', 'data_file_path')
+        self.to_gray = bool(int(config.get('Train', 'transform_to_gray')))
 
 
 class DataReaderH5:
@@ -57,11 +58,14 @@ class Main:
     def __init__(self, sets):
         self.sets = sets
         self.size_image = 128
-        self.n_channels = 3
         self.batch_size = 32
         self.learning_rate = 0.0001
         self.epochs = 400
         self.sample_num = 32
+        if sets.to_gray:
+            self.n_channels = 1
+        else:
+            self.n_channels = 3
 
         self.d_bn1 = batch_norm(name='d_bn1')
         self.d_bn2 = batch_norm(name='d_bn2')
@@ -81,11 +85,14 @@ class Main:
 
     def generator(self, x):
         with tf.variable_scope("generator") as scope:
-            # to 128x128x3 --> 128x128x1
-            h0_ = lrelu(conv2d(x, 1, d_h=1, d_w=1, name='g_hA_conv'))
-            s_h0_ = h0_.get_shape()
+            if self.n_channels == 3:
+                # to 128x128x3 --> 128x128x1
+                h0_ = lrelu(conv2d(x, 1, d_h=1, d_w=1, name='g_hA_conv'))
+                s_h0_ = h0_.get_shape()
+            else:
+                s_h0_ = x.get_shape()
             # down to 64x64x64
-            h0 = lrelu(conv2d(h0_, self.gf_dim, name='g_h0_conv'))
+            h0 = lrelu(conv2d(x, self.gf_dim, name='g_h0_conv'))
             s_h0 = h0.get_shape()
             # down to 32x32x128
             h1 = lrelu(conv2d(h0, self.gf_dim * 2, name='g_h1_conv'))
@@ -123,11 +130,14 @@ class Main:
     def sampler(self, x):
         with tf.variable_scope("generator") as scope:
             scope.reuse_variables()
-            # to 128x128x3 --> 128x128x1
-            h0_ = lrelu(conv2d(x, 1, d_h=1, d_w=1, name='g_hA_conv'))
-            s_h0_ = h0_.get_shape()
+            if self.n_channels == 3:
+                # to 128x128x3 --> 128x128x1
+                h0_ = lrelu(conv2d(x, 1, d_h=1, d_w=1, name='g_hA_conv'))
+                s_h0_ = h0_.get_shape()
+            else:
+                s_h0_ = x.get_shape()
             # down to 64x64x64
-            h0 = lrelu(conv2d(h0_, self.gf_dim, name='g_h0_conv'))
+            h0 = lrelu(conv2d(x, self.gf_dim, name='g_h0_conv'))
             s_h0 = h0.get_shape()
             # down to 32x32x128
             h1 = lrelu(conv2d(h0, self.gf_dim * 2, name='g_h1_conv'))
@@ -177,7 +187,10 @@ class Main:
         with tf.variable_scope("discriminator") as scope:
             if reuse:
                 scope.reuse_variables()
-            t0 = lrelu(conv2d(image, 1, d_h=1, d_w=1, name='d_hA_conv'))
+            if self.n_channels == 3:
+                t0 = lrelu(conv2d(image, 1, d_h=1, d_w=1, name='d_hA_conv'))
+            else:
+                t0 = image
             t1 = self.siamese_tower(t0, reuse=reuse)
             t2 = self.siamese_tower(mask, reuse=True)
             t3 = concat([t1, t2], 1)
@@ -311,12 +324,12 @@ class Main:
 
     def main(self):
         launch_time = datetime.datetime.now()
-        log = 'fgan_{0:4}{1:2}{2:2}_{3:2}{4:2}{5:2}'.format(launch_time.year,
-                                                            launch_time.month,
-                                                            launch_time.day,
-                                                            launch_time.hour,
-                                                            launch_time.minute,
-                                                            launch_time.second).replace(' ', '0')
+        log = 'fgan_y{0:4}_m{1:2}_d{2:2}_h{3:2}{4:2}{5:2}'.format(launch_time.year,
+                                                                  launch_time.month,
+                                                                  launch_time.day,
+                                                                  launch_time.hour,
+                                                                  launch_time.minute,
+                                                                  launch_time.second).replace(' ', '0')
         self.log_dir = os.path.join(self.sets.logdir, log)
         if not os.path.exists(self.sets.logdir):
             os.mkdir(self.sets.logdir)
@@ -325,7 +338,8 @@ class Main:
             os.mkdir(self.sample_dir)
         self.data_reader = DataReaderH5(self.sets.datapath)
         #optional
-        # self.data_reader.to_gray()
+        if self.n_channels == 1:
+            self.data_reader.to_gray()
 
         print('db_list length: {}'.format(self.data_reader.x.shape[0]))
 
