@@ -45,6 +45,14 @@ class DataReaderH5:
             self.x = f['x'].value
             self.y = f['y'].value
 
+    def to_gray(self):
+        x_new = np.zeros_like(self.y)
+        for i in range(x_new.shape[0]):
+            tmp_x = np.reshape(self.x[i], (self.x.shape[1], self.x.shape[2], self.x.shape[3]))
+            x_new[i, :, :, 0] = np.dot(tmp_x, [0.299, 0.587, 0.114])
+        self.x = x_new
+
+
 class Main:
     def __init__(self, sets):
         self.sets = sets
@@ -181,7 +189,6 @@ class Main:
         self.x = tf.placeholder(tf.float32,
                                 shape=[self.batch_size, self.size_image, self.size_image, self.n_channels],
                                 name='img_input')
-        ## Al momento non utilizzo la mask
         self.y = tf.placeholder(tf.float32,
                                 shape=[self.batch_size, self.size_image, self.size_image, 1],
                                 name='mask_input')
@@ -317,6 +324,8 @@ class Main:
         if not os.path.exists(self.sample_dir):
             os.mkdir(self.sample_dir)
         self.data_reader = DataReaderH5(self.sets.datapath)
+        #optional
+        # self.data_reader.to_gray()
 
         print('db_list length: {}'.format(self.data_reader.x.shape[0]))
 
