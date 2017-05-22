@@ -48,6 +48,84 @@ class Settings:
         return dataset
 
 
+class DataHandler_IFS_TC(T.DataHandler):
+    def __init__(self):
+        T.DataHandler.__init__(self)
+        self.textual_db = None
+        self.image_db = None
+
+    def read_data(self, db):
+        self.textual_db = db
+        self.image_db = []
+        for i, n in enumerate(db):
+            im1 = misc.imread(n[0], mode='RGB')
+            im2 = misc.imread(n[1], flatten=True)
+            self.image_db.append((im1, im2))
+
+    def prepare_data_patches(self, iw, ih, pximage=10):
+        db_size = len(self.image_db)
+        im_tensor = np.zeros((db_size*pximage, iw, ih, 3), dtype=np.float32)
+        mk_tensor = np.zeros((db_size*pximage, iw, ih, 1), dtype=np.float32)
+        im_names = list()
+        myiter = 0
+        for i, n in enumerate(self.image_db):
+            img = n[0] / 255
+            mask = n[1] / 255
+            image_shape = img.shape[0:-1]
+            mask_shape = mask.shape
+            # for unknown reasons some masks are not of the same size of the images
+            if image_shape != mask_shape:
+                mask = misc.imresize(mask, image_shape)
+                mask = mask / 255  # not clear why we need this but we do
+                print('This image does not work {} - Performing resize of the mask'.format(i))
+            limitH = (0, image_shape[0] - ih)
+            limitW = (0, image_shape[1] - iw)
+            tmp_check = 1
+            while True:
+                h0 = rand.randint(limitH[0], limitH[1])
+                w0 = rand.randint(limitW[0], limitW[1])
+                im1 = img[h0:h0+ih, w0:w0+iw, :]
+                im2 = mask[h0:h0+ih, w0:w0+iw]
+                # condition for having some tampering region into the patch
+                if np.sum(im2) == 0 or np.sum(im2) == iw * ih:
+                    tmp_check += 1
+                    if tmp_check % 200 == 0:
+                        print('tmp_check for image {}/{} = {}'.format(i, len(self.image_db), tmp_check))
+                    continue
+                im_tensor[myiter] = im1
+                mk_tensor[myiter, :, :, 0] = im2
+                im_names.append(self.textual_db[i])
+                myiter += 1
+                if myiter % pximage == 0:
+                    break
+        self.textual_db = im_names
+        self.x = im_tensor
+        self.y = mk_tensor
+
+    def prepare_data_resize(self, iw, ih):
+        db_size = len(self.image_db)
+        im_tensor = np.zeros((db_size, iw, ih, 3), dtype=np.float32)
+        mk_tensor = np.zeros((db_size, iw, ih, 1), dtype=np.float32)
+        for i, n in enumerate(self.image_db):
+            im1 = misc.imresize(n[0], (iw, ih))
+            im2 = misc.imresize(n[1], (iw, ih))
+            im2 = im2 / 255
+            im_tensor[i, :, :, :] = im1[:, :, 0:3]
+            if len(im2.shape) > 2:
+                mk_tensor[i, :, :, 0] = im2[:, :, 0]
+                raise Exception('This condition should never happens')
+            else:
+                mk_tensor[i, :, :, 0] = im2[:, :]
+        self.x = im_tensor
+        self.y = mk_tensor
+
+    def shuffle_db(self):
+        ord = T.DataHandler.shuffle_db(self)
+        tmp = [self.textual_db[i] for i in ord]
+        self.textual_db = tmp
+
+
+
 t0 = time()
 patch_size = 128
 launch_time = datetime.datetime.now()
@@ -65,7 +143,7 @@ fileout = os.path.join(dir_out, fileout_root)
 sets = Settings('config.cfg')
 db_list = sets.check_dataset()
 t1 = time()
-data_reader = T.DataHandler_IFS_TC()
+data_reader = DataHandler_IFS_TC()
 data_reader.read_data(db_list)
 t2 = time()
 data_reader.prepare_data_patches(patch_size, patch_size, pximage=10)

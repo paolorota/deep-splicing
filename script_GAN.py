@@ -354,7 +354,7 @@ class Main:
         self.log_dir = os.path.join(self.sets.logdir, log)
         if not os.path.exists(self.sets.logdir):
             os.mkdir(self.sets.logdir)
-        self.sample_dir = os.path.join('./samples', log)
+        self.sample_dir = os.path.join('samples', log)
         if not os.path.exists(self.sample_dir):
             os.mkdir(self.sample_dir)
         self.data_reader = DataReaderH5(self.sets.datapath)
