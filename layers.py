@@ -10,22 +10,18 @@ else:
     def concat(tensors, axis, *args, **kwargs):
         return tf.concat(tensors, axis, *args, **kwargs)
 
+def batchnorm(input):
+    with tf.variable_scope("batch_norm"):
+        # this block looks like it has 3 inputs on the graph unless we do this
+        input = tf.identity(input)
 
-class batch_norm(object):
-  def __init__(self, epsilon=1e-5, momentum=0.9, name="batch_norm"):
-    with tf.variable_scope(name):
-      self.epsilon = epsilon
-      self.momentum = momentum
-      self.name = name
-
-  def __call__(self, x, train=True):
-    return tf.contrib.layers.batch_norm(x,
-                      decay=self.momentum,
-                      updates_collections=None,
-                      epsilon=self.epsilon,
-                      scale=True,
-                      is_training=train,
-                      scope=self.name)
+        channels = input.get_shape()[3]
+        offset = tf.get_variable("offset", [channels], dtype=tf.float32, initializer=tf.zeros_initializer())
+        scale = tf.get_variable("scale", [channels], dtype=tf.float32, initializer=tf.random_normal_initializer(1.0, 0.02))
+        mean, variance = tf.nn.moments(input, axes=[0, 1, 2], keep_dims=False)
+        variance_epsilon = 1e-5
+        normalized = tf.nn.batch_normalization(input, mean, variance, offset, scale, variance_epsilon=variance_epsilon)
+        return normalized
 
 
 def conv_cond_concat(x, y):
