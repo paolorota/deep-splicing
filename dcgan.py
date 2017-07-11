@@ -8,7 +8,8 @@ def conv_out_size_same(size, stride):
 
 
 class DCGAN:
-    def __init__(self, x, y, log_dir='./log', sample_dir='./samples'):
+    def __init__(self, x, y, log_dir='./log', sample_dir='./samples',
+                 save_images_interval=None):
         self.size_image = 128
         self.batch_size = 32
         self.learning_rate = 0.0001
@@ -28,6 +29,11 @@ class DCGAN:
         self.log_dir = log_dir
         self.train_x = x
         self.train_y = y
+        if save_images_interval == None:
+            self.save_images_interval = int(x.shape[0] / self.batch_size)
+        else:
+            self.save_images_interval = save_images_interval
+
 
     def generator(self, x, ngf=64, n_layers=7):
         with tf.variable_scope("generator") as scope:
@@ -224,7 +230,7 @@ class DCGAN:
             t5 = linear(t4, 1, 'd_siam2_lin')
             return tf.nn.sigmoid(t5), t5
 
-    def create_discriminator(self, discrim_inputs, discrim_targets, reuse=False):
+    def discriminator(self, image_in, image_out, reuse=False):
 
         with tf.variable_scope("discriminator") as scope:
             if reuse:
@@ -234,7 +240,7 @@ class DCGAN:
 
             # 2x [batch, height, width, in_channels] => [batch, height, width, in_channels * 2]
 
-            input = tf.concat([discrim_inputs, discrim_targets], axis=3)
+            input = tf.concat([image_in, image_out], axis=3)
 
             # layer_1: [batch, 256, 256, in_channels * 2] => [batch, 128, 128, ndf]
             with tf.variable_scope("layer_1"):
@@ -279,8 +285,8 @@ class DCGAN:
         self.y_sum = tf.summary.image("y", self.y)
 
         self.G = self.generator(self.x)
-        self.D, self.D_logits = self.create_discriminator(self.x, self.y, reuse=False)
-        self.D_, self.D_logits_ = self.create_discriminator(self.x, self.G, reuse=True)
+        self.D, self.D_logits = self.discriminator(self.x, self.y, reuse=False)
+        self.D_, self.D_logits_ = self.discriminator(self.x, self.G, reuse=True)
         # self.D, self.D_logits = self.siamese_discriminator(self.x, self.y, reuse=False)
         # self.D_, self.D_logits_ = self.siamese_discriminator(self.x, self.G, reuse=True)
         self.S = self.sampler(self.x)
@@ -381,7 +387,7 @@ class DCGAN:
                 ))
 
                 # save images every 100 batch iters
-                if np.mod(counter, 100) == 1:
+                if np.mod(counter, self.save_images_interval) == 1:
                     samples, d_loss, g_loss = sess.run(
                         [self.S, self.d_loss, self.g_loss],
                         feed_dict={
@@ -391,6 +397,9 @@ class DCGAN:
                     )
                     manifold_h = int(np.ceil(np.sqrt(samples.shape[0])))
                     manifold_w = int(np.ceil(np.sqrt(samples.shape[0])))
+
+                    # write images from -1 --> 1 to 0 --> 1
+                    # samples = (samples + 1) / 2
                     save_images(samples, [manifold_h, manifold_w], '{}/train_{:02d}_{:04d}_Gx.png'.format(
                         self.sample_dir, epoch, idx))
                     save_images(sample_labels, [manifold_h, manifold_w], '{}/train_{:02d}_{:04d}_y.png'.format(
