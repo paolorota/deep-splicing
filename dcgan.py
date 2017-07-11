@@ -9,19 +9,19 @@ def conv_out_size_same(size, stride):
 
 class DCGAN:
     def __init__(self, x, y, log_dir='./log', sample_dir='./samples',
-                 save_images_interval=None):
+                 save_images_interval=None, channel_x=1, channel_y=3):
         self.size_image = 128
         self.batch_size = 32
         self.learning_rate = 0.0001
         self.epochs = 400
         self.sample_num = 32
 
-        self.n_channelsX = 1
-        self.n_channelsY = 3
+        self.n_channelsX = channel_x
+        self.n_channelsY = channel_y
 
         self.gf_dim = 64
         self.gfc_dim = 1024
-        self.c_dim = 3  # output of the generator
+        self.c_dim = channel_y  # output of the generator
         self.df_dim = 64
         self.z_dim = 100
 
