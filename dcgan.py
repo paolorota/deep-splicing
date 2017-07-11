@@ -212,7 +212,7 @@ class DCGAN:
                 with tf.variable_scope("slayer_%d" % i):
                     layers.append(lrelu(batchnorm(conv2d(layers[-1], self.df_dim * (i - 1) * 2, name='d_tow%d_con' % i))))
 
-            layers.append(linear(tf.reshape(layers[-1], [self.batch_size, -1]), 128, 'd_tow_lin'))
+            # layers.append(linear(tf.reshape(layers[-1], [self.batch_size, -1]), 128, 'd_tow_lin'))
             return layers[-1]
 
     def siamese_discriminator(self, image_in, image_out, reuse=False):
@@ -225,13 +225,18 @@ class DCGAN:
                 image_out = lrelu(conv2d(image_out, 1, d_h=1, d_w=1, name='d_hprel_out'))
             t1 = self.siamese_tower(image_in, reuse=reuse)
             t2 = self.siamese_tower(image_out, reuse=True)
-            t3 = concat([t1, t2], 1)
-            t4 = linear(t3, 64, 'd_siam1_lin')
-            t5 = linear(t4, 1, 'd_siam2_lin')
-            return tf.nn.sigmoid(t5), t5
+            t3 = concat([t1, t2], -1)
+            layers = []
+            layers.append(t3)
+            n_layers = 3
+            for i in range(1, n_layers):
+                with tf.variable_scope("uslayer_%d" % i):
+                    layers.append(lrelu(conv2d(layers[-1], self.df_dim / (2 * i), name='d_tow%d_conv' % i)))
+            # t4 = linear(t3, 64, 'd_siam1_lin')
+            # t5 = linear(t4, 1, 'd_siam2_lin')
+            return tf.nn.sigmoid(layers[-1]), layers[-1]
 
     def discriminator(self, image_in, image_out, reuse=False):
-
         with tf.variable_scope("discriminator") as scope:
             if reuse:
                 scope.reuse_variables()
@@ -242,15 +247,15 @@ class DCGAN:
 
             input = tf.concat([image_in, image_out], axis=3)
 
-            # layer_1: [batch, 256, 256, in_channels * 2] => [batch, 128, 128, ndf]
+            # layer_1: [batch, 128, 128, in_channels * 2] => [batch, 64, 64, df_dim]
             with tf.variable_scope("layer_1"):
                 convolved = conv2d(input_=input, output_dim=self.df_dim, k_h=4, k_w=4)
                 rectified = lrelu(convolved, 0.2)
                 layers.append(rectified)
 
-            # layer_2: [batch, 128, 128, ndf] => [batch, 64, 64, ndf * 2]
-            # layer_3: [batch, 64, 64, ndf * 2] => [batch, 32, 32, ndf * 4]
-            # layer_4: [batch, 32, 32, ndf * 4] => [batch, 31, 31, ndf * 8]
+            # layer_2: [batch, 64, 64, df_dim] => [batch, 32, 32, df_dim * 2]
+            # layer_3: [batch, 32, 32, df_dim * 2] => [batch, 16, 16, df_dim * 4]
+            # layer_4: [batch, 16, 16, df_dim * 4] => [batch, 16, 16, df_dim * 8]
             for i in range(n_layers):
                 with tf.variable_scope("layer_%d" % (len(layers) + 1)):
                     out_channels = self.df_dim * min(2 ** (i + 1), 8)
@@ -260,7 +265,7 @@ class DCGAN:
                     rectified = lrelu(normalized, 0.2)
                     layers.append(rectified)
 
-            # layer_5: [batch, 31, 31, ndf * 8] => [batch, 30, 30, 1]
+            # layer_5: [batch, 16, 16, df_dim * 8] => [batch, 16, 16, 1]
             with tf.variable_scope("layer_%d" % (len(layers) + 1)):
                 convolved = conv2d(rectified, output_dim=1, d_h=1, d_w=1)
                 output = tf.sigmoid(convolved)
@@ -294,9 +299,9 @@ class DCGAN:
         # print('Noise tensor {}'.format(self.z.get_shape()))
         print('Image tensor {}'.format(self.x.get_shape()))
         print('Mask tensor {}'.format(self.y.get_shape()))
-        self.d_sum = tf.summary.histogram("d", self.D)
-        self.d__sum = tf.summary.histogram("d_", self.D_)
-        self.G_sum = tf.summary.image("G", self.G)
+        self.d_sum = tf.summary.histogram("discriminator_true", self.D)
+        self.d__sum = tf.summary.histogram("discriminator_fake", self.D_)
+        self.G_sum = tf.summary.image("G(x)", self.G)
 
         self.d_loss_real = tf.reduce_mean(
             tf.nn.sigmoid_cross_entropy_with_logits(logits=self.D_logits, labels=tf.ones_like(self.D)))
@@ -350,23 +355,24 @@ class DCGAN:
                 # batch_z = np.random.uniform(-1, 1, [self.batch_size, self.z_dim]).astype(np.float32)
 
                 # Update D network
-                _, summary_str, summary_str1 = sess.run([d_optim, self.d_sum, self.in_sum],
-                                                        feed_dict={
-                                                            self.x: batch_images,
-                                                            self.y: batch_labels
-                                                        })
+                _, summary_str1, summary_str2 = sess.run([d_optim, self.d_sum, self.in_sum],
+                                                         feed_dict={
+                                                             self.x: batch_images,
+                                                             self.y: batch_labels
+                                                         })
                 # step = (np.float32(epoch) + 1)+(np.float32(idx)/np.float32(batch_idxs))
-                self.writer.add_summary(summary=summary_str, global_step=counter)
-                self.writer.add_summary(summary=summary_str1, global_step=counter)
 
-                # Update G (twice because it is suggested like so)
-                for j in xrange(1):
-                    _, summary_str = sess.run([g_optim, self.g_sum],
-                                              feed_dict={
-                                                  self.x: batch_images,
-                                                  self.y: batch_labels
-                                              })
-                self.writer.add_summary(summary=summary_str, global_step=counter)
+
+                # # Update G (twice because it is suggested like so)
+                # for j in xrange(1):
+                _, summary_str3 = sess.run([g_optim, self.g_sum],
+                                           feed_dict={
+                                               self.x: batch_images,
+                                               self.y: batch_labels
+                                           })
+                self.writer.add_summary(summary=summary_str1, global_step=counter)
+                self.writer.add_summary(summary=summary_str2, global_step=counter)
+                self.writer.add_summary(summary=summary_str3, global_step=counter)
 
                 # compute error on training
                 errD_fake = self.d_loss_fake.eval({
